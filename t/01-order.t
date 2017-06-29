@@ -28,7 +28,12 @@ my $db_opts = {
 
 my $schema = OpenCloset::Schema->connect($db_opts);
 
+my $hostname = `hostname`;
+my $username = $ENV{USER};
+
 subtest '포장 -> 포장완료' => sub {
+    plan skip_all => 'Do not run on service host' if $username eq 'opencloset' or $hostname =~ m/opencloset/;
+
     my $api = OpenCloset::API::Order->new( schema => $schema, notify => 0 );
     ok( $api, 'OpenCloset::API::Order->new' );
 
