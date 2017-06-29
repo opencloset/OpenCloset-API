@@ -8,15 +8,20 @@ use HTTP::Tiny;
 use Try::Tiny;
 
 use OpenCloset::Constants::Category ();
-use OpenCloset::Constants::Status qw/$BOX $BOXED $PAYMENT/;
+use OpenCloset::Constants::Status qw/$BOX $BOXED $PAYMENT $CHOOSE_CLOTHES $CHOOSE_ADDRESS $PAYMENT $PAYMENT_DONE $WAITING_DEPOSIT $PAYBACK/;
+
+use OpenCloset::DB::Plugin::Order::Sale;
 
 =encoding utf8
 
 =head1 NAME
 
-OpenCloset::API::Order
+OpenCloset::API::Order - 주문서의 상태변경 API
 
 =head1 SYNOPSIS
+
+    my $api = OpenCloset::API::Order(schema => $schema);
+    my $success = $api->box2boxed($order, ['J001', 'P001']);    # 포장 -> 포장완료
 
 =cut
 
@@ -28,6 +33,21 @@ our $MONITOR_HOST = $ENV{OPENCLOSET_MONITOR_HOST} || "https://monitor.theopenclo
 
     my $api = OpenCloset::API::Order->new(schema => $schema);
 
+=over
+
+=item *
+
+schema - S<OpenCloset::Schema>
+
+=item *
+
+notify - Boolean
+
+monitor 서비스로 상태변경 event 를 알립니다.
+default 는 true 입니다.
+
+=back
+
 =cut
 
 sub new {
@@ -35,8 +55,9 @@ sub new {
 
     my $self = {
         schema => $args{schema},
+        notify => $args{notify} // 1,
         http   => HTTP::Tiny->new(
-            timeout         => 1,
+            timeout         => 3,
             default_headers => {
                 agent        => __PACKAGE__,
                 content_type => 'application/json',
@@ -48,9 +69,9 @@ sub new {
     return $self;
 }
 
-=head2 box2boxed( \@clothes_code )
+=head2 box2boxed( \@codes )
 
-포장 -> 포장완료
+B<포장> -> B<포장완료>
 
     my $success = $api->box2boxed(['J001', 'P001']);
 
@@ -74,6 +95,14 @@ sub new {
 
 =item *
 
+3회 이상 대여자 할인 및 쿠폰 할인
+
+=item *
+
+배송비(C<0>)와 에누리(C<0>) 추가
+
+=item *
+
 opencloset/monitor 에 event 를 posting
 
 =back
@@ -82,8 +111,8 @@ opencloset/monitor 에 event 를 posting
 
 sub box2boxed {
     my ( $self, $order, $codes ) = @_;
+    return unless @{ $codes ||= [] };
 
-    return unless @$codes;
     my @codes = map { sprintf( '%05s', $_ ) } @$codes;
 
     my $schema = $self->{schema};
@@ -102,13 +131,14 @@ sub box2boxed {
             my $name = join( q{ - }, $trim_code, $OpenCloset::Constants::Category::LABEL_MAP{$category} );
             $clothes->update( { status_id => $PAYMENT } );
 
-            ## 3회 이상 대여 할인에 사용된 후에
+            ## 3회 이상 대여 할인 대상자의 경우 가격이 변경되기 때문에 미리 넣으면 아니됨
             push @order_details, {
-                clothes_code => $code,
-                status_id    => $PAYMENT,
-                name         => $name,
-                price        => $clothes->price,
-                final_price  => $clothes->price,
+                clothes_code     => $code,
+                clothes_category => $clothes->category,
+                status_id        => $PAYMENT,
+                name             => $name,
+                price            => $clothes->price,
+                final_price      => $clothes->price,
             };
 
             ## 사용자의 구두 사이즈를 주문서의 구두 사이즈로 변경 (#1251)
@@ -121,48 +151,119 @@ sub box2boxed {
             }
         }
 
-        my $sale_price = {
-            before                => 0,
-            after                 => 0,
-            rented_without_coupon => 0,
-        };
+        ## 3회 이상 대여자 할인 또는 쿠폰 할인
+        ## 결제대기 상태에서 쿠폰을 삽입하면 3회 이상 대여자의 중복할인을 제거해야 한다
+        if ( my $coupon = $order->coupon ) {
+            ## 쿠폰할인(가격, 비율, 단벌)
+            ##   할인명목의 품목이 추가되는 방식(할인쿠폰: -10,000원)
+            my $price_pay_with = '쿠폰';
+            my $type           = $coupon->type;
+            if ( $type eq 'default' ) {
+                $price_pay_with .= '+';
+                my $price = $coupon->price;
+                push @order_details, {
+                    name        => sprintf( "%s원 할인쿠폰", $self->commify($price) ),
+                    price       => $price * -1,
+                    final_price => $price * -1,
+                };
+            }
+            elsif ( $type =~ m/(rate|suit)/ ) {
+                my $price = 0;
+                $price += $_->{price} for @order_details;
 
-        ## 쿠폰이 사용된 주문서는 3회 이상 할인에서 제외한다.
-        my $coupon = $order->coupon;
-        if ( !$coupon ) {
-            $sale_price = $order->sale_multi_times_rental( \@order_details );
-            $self->log->debug(
-                sprintf(
-                    "order %d: %d rented without coupon",
-                    $order->id,
-                    $sale_price->{rented_without_coupon},
-                )
-            );
+                if ( $type eq 'rate' ) {
+                    my $rate = $coupon->price;
+                    $price_pay_with .= '+';
+                    push @order_details, {
+                        name        => sprintf( "%d%% 할인쿠폰", $rate ),
+                        price       => ( $price * $rate / 100 ) * -1,
+                        final_price => ( $price * $rate / 100 ) * -1,
+                    };
+                }
+                elsif ( $type eq 'suit' ) {
+                    push @order_details, {
+                        name        => '단벌 할인쿠폰',
+                        price       => $price * -1,
+                        final_price => $price * -1,
+                    };
+                }
+            }
+
+            $order->update( { price_pay_with => $price_pay_with } );
         }
+        else {
+            ## 3회 이상 대여 할인
+            ##   의류 품목에서 할인금액이 차감되는 방식(자켓: 10,000 -> 7,000)
+            my $sale_price = {
+                before                => 0,
+                after                 => 0,
+                rented_without_coupon => 0,
+            };
+
+            $sale_price = $order->sale_multi_times_rental( \@order_details );
+        }
+
+        for my $od (@order_details) {
+            delete $od->{clothes_category};
+            my $detail = $order->create_related( 'order_details', $od );
+            die "Failed to create a new order_detail" unless $detail;
+        }
+
+        ## 일반적으로 `포장 -> 포장완료`는 offline 에서의 절차이므로 배송비(0)와 에누리(0)를 추가
+        for my $name (qw/배송비 에누리/) {
+            $order->create_related(
+                'order_details',
+                {
+                    name        => $name,
+                    price       => 0,
+                    final_price => 0,
+                }
+            ) or die "Failed to create a new order_detail for $name";
+        }
+
+        $guard->commit;
+        return 1;
     }
     catch {
-        my $err      = $_;
-        my $order_id = $order->id;
-        warn "Failed to update box2boxed($order_id)";
+        my $err = $_;
         return ( undef, $err );
     };
 
-    if ($success) {
-        my $res = $self->{http}->post_form(
-            "$MONITOR_HOST/events",
-            { sender => 'order', order_id => $order->id, from => $BOX, to => $BOXED }
-        );
-
-        warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
+    unless ($success) {
+        my $order_id = $order->id;
+        warn "Failed to execute box2boxed($order_id): $error";
+        return;
     }
 
-    # opencloset/monitor 에 event posting
-    # order_details 를 결제대기로 변경
-    # $shoes.length 를 user_info.foot 에 반영
-    # 3회 이상 비용할인
-    # 배송비
-    # 에누리
-    # 쿠폰을 고려
+    return 1 unless $self->{notify};
+
+    my $res = $self->{http}->post_form(
+        "$MONITOR_HOST/events",
+        { sender => 'order', order_id => $order->id, from => $BOX, to => $BOXED }
+    );
+
+    warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
+
+    return 1;
 }
+
+sub commify {
+    my $self = shift;
+    local $_ = shift;
+    1 while s/((?:\A|[^.0-9])[-+]?\d+)(\d{3})/$1,$2/s;
+    return $_;
+}
+
+=head1 AUTHOR
+
+Hyungsuk Hong
+
+=head1 COPYRIGHT
+
+The MIT License (MIT)
+
+Copyright (c) 2017 열린옷장
+
+=cut
 
 1;
