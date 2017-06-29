@@ -69,11 +69,11 @@ sub new {
     return $self;
 }
 
-=head2 box2boxed( \@codes )
+=head2 box2boxed( $order, \@codes )
 
 B<포장> -> B<포장완료>
 
-    my $success = $api->box2boxed(['J001', 'P001']);
+    my $success = $api->box2boxed($order, ['J001', 'P001']);
 
 =over
 
