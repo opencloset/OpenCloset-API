@@ -1,7 +1,8 @@
 use strict;
 use warnings;
-use Test::More tests => 1;
+use Test::More;
 
 BEGIN { use_ok('OpenCloset::API'); }
+BEGIN { use_ok('OpenCloset::API::Order'); }
 
-done_testing(1);
+done_testing;
