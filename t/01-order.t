@@ -15,23 +15,20 @@ use lib 't/lib';
 use Param::Order qw/order_param/;
 use Param::Coupon qw/coupon_param/;
 
-my $db_opts;
-# my $db_opts = {
-#     dsn  => "dbi:mysql:opencloset:127.0.0.1",
-#     user => 'opencloset',
-#     password => 's3cr3t',
-#     quote_char        => q{`},
-#     mysql_enable_utf8 => 1,
-#     on_connect_do     => 'SET NAMES utf8',
-#     RaiseError        => 1,
-#     AutoCommit        => 1,
-# };
+my $db_opts = {
+    dsn  => $ENV{OPENCLOSET_DATABASE_DSN}  || "dbi:mysql:opencloset:127.0.0.1",
+    user => $ENV{OPENCLOSET_DATABASE_USER} || 'opencloset',
+    password => $ENV{OPENCLOSET_DATABASE_PASS} // 'opencloset',
+    quote_char        => q{`},
+    mysql_enable_utf8 => 1,
+    on_connect_do     => 'SET NAMES utf8',
+    RaiseError        => 1,
+    AutoCommit        => 1,
+};
 
 my $schema = OpenCloset::Schema->connect($db_opts);
 
 subtest '포장 -> 포장완료' => sub {
-    plan skip_all => 'DB 연결정보가 없습니다' unless $db_opts;
-
     my $api = OpenCloset::API::Order->new( schema => $schema, notify => 0 );
     ok( $api, 'OpenCloset::API::Order->new' );
 
