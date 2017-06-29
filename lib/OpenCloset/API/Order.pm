@@ -202,6 +202,10 @@ sub box2boxed {
             };
 
             $sale_price = $order->sale_multi_times_rental( \@order_details );
+            if ( $sale_price->{before} != $sale_price->{after} ) {
+                my $sale = $schema->resultset('Sale')->find( { name => '3times' } );
+                $order->create_related( 'order_sales', { sale_id => $sale->id } );
+            }
         }
 
         for my $od (@order_details) {
