@@ -247,6 +247,26 @@ sub box2boxed {
     return 1;
 }
 
+=head2 notify( $order, $status_from, $status_to )
+
+    my $res = $self->notify($order, $BOXED, $PAYMENT);
+
+=cut
+
+sub notify {
+    my ( $self, $order, $from, $to ) = @_;
+    return unless $order;
+    return unless $from;
+    return unless $to;
+
+    my $res = $self->{http}->post_form(
+        "$MONITOR_HOST/events",
+        { sender => 'order', order_id => $order->id, from => $from, to => $to }
+    );
+
+    return $res;
+}
+
 =head2 commify
 
     $self->commify(10000);    # 10,000
