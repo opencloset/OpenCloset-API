@@ -157,4 +157,16 @@ subtest '포장 -> 포장완료' => sub {
     ok( $order->order_details( { name => '에누리' } )->next, '에누리' );
 };
 
+subtest '포장완료 -> 결제대기' => sub {
+    my $order_param = order_param($schema);
+    $order_param->{user_id} = 2;
+
+    my $order   = $schema->resultset('Order')->create($order_param);
+    my @codes   = qw/0J001 0P001 0S003 0A001/;
+    my $success = $api->box2boxed( $order, \@codes );
+    $success = $api->boxed2payment($order);
+    ok( $success, 'boxed2payment' );
+    is( $order->status_id, $PAYMENT, 'status_id' );
+};
+
 done_testing();
