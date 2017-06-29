@@ -247,6 +247,12 @@ sub box2boxed {
     return 1;
 }
 
+=head2 commify
+
+    $self->commify(10000);    # 10,000
+
+=cut
+
 sub commify {
     my $self = shift;
     local $_ = shift;
