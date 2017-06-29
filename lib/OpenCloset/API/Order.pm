@@ -111,6 +111,7 @@ opencloset/monitor 에 event 를 posting
 
 sub box2boxed {
     my ( $self, $order, $codes ) = @_;
+    return unless $order;
     return unless @{ $codes ||= [] };
 
     my @codes = map { sprintf( '%05s', $_ ) } @$codes;
@@ -237,11 +238,27 @@ sub box2boxed {
 
     return 1 unless $self->{notify};
 
-    my $res = $self->{http}->post_form(
-        "$MONITOR_HOST/events",
-        { sender => 'order', order_id => $order->id, from => $BOX, to => $BOXED }
-    );
+    my $res = $self->notify( $order, $BOX, $BOXED );
+    warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
 
+    return 1;
+}
+
+=head2 boxed2payment( $order )
+
+    my $success = $api->boxed2payment($order);
+
+=cut
+
+sub boxed2payment {
+    my ( $self, $order ) = @_;
+    return unless $order;
+
+    $order->update( { status_id => $PAYMENT } );
+
+    return 1 unless $self->{notify};
+
+    my $res = $self->notify( $order, $BOXED, $PAYMENT );
     warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
 
     return 1;
