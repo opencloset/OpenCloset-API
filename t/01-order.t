@@ -31,12 +31,14 @@ my $schema = OpenCloset::Schema->connect($db_opts);
 my $hostname = `hostname`;
 my $username = $ENV{USER};
 
+if ( $username eq 'opencloset' or $hostname =~ m/opencloset/ ) {
+    plan skip_all => 'Do not run on service host';
+}
+
+my $api = OpenCloset::API::Order->new( schema => $schema, notify => 0 );
+ok( $api, 'OpenCloset::API::Order->new' );
+
 subtest '포장 -> 포장완료' => sub {
-    plan skip_all => 'Do not run on service host' if $username eq 'opencloset' or $hostname =~ m/opencloset/;
-
-    my $api = OpenCloset::API::Order->new( schema => $schema, notify => 0 );
-    ok( $api, 'OpenCloset::API::Order->new' );
-
     my $order_param;
     $order_param = order_param($schema);
     $order_param->{user_id} = 2; # 3회 이상 대여자 id
