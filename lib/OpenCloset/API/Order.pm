@@ -69,11 +69,11 @@ sub new {
     return $self;
 }
 
-=head2 box2boxed( \@codes )
+=head2 box2boxed( $order, \@codes )
 
 B<포장> -> B<포장완료>
 
-    my $success = $api->box2boxed(['J001', 'P001']);
+    my $success = $api->box2boxed($order, ['J001', 'P001']);
 
 =over
 
@@ -111,6 +111,7 @@ opencloset/monitor 에 event 를 posting
 
 sub box2boxed {
     my ( $self, $order, $codes ) = @_;
+    return unless $order;
     return unless @{ $codes ||= [] };
 
     my @codes = map { sprintf( '%05s', $_ ) } @$codes;
@@ -237,15 +238,57 @@ sub box2boxed {
 
     return 1 unless $self->{notify};
 
-    my $res = $self->{http}->post_form(
-        "$MONITOR_HOST/events",
-        { sender => 'order', order_id => $order->id, from => $BOX, to => $BOXED }
-    );
-
+    my $res = $self->notify( $order, $BOX, $BOXED );
     warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
 
     return 1;
 }
+
+=head2 boxed2payment( $order )
+
+    my $success = $api->boxed2payment($order);
+
+=cut
+
+sub boxed2payment {
+    my ( $self, $order ) = @_;
+    return unless $order;
+
+    $order->update( { status_id => $PAYMENT } );
+
+    return 1 unless $self->{notify};
+
+    my $res = $self->notify( $order, $BOXED, $PAYMENT );
+    warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
+
+    return 1;
+}
+
+=head2 notify( $order, $status_from, $status_to )
+
+    my $res = $self->notify($order, $BOXED, $PAYMENT);
+
+=cut
+
+sub notify {
+    my ( $self, $order, $from, $to ) = @_;
+    return unless $order;
+    return unless $from;
+    return unless $to;
+
+    my $res = $self->{http}->post_form(
+        "$MONITOR_HOST/events",
+        { sender => 'order', order_id => $order->id, from => $from, to => $to }
+    );
+
+    return $res;
+}
+
+=head2 commify
+
+    $self->commify(10000);    # 10,000
+
+=cut
 
 sub commify {
     my $self = shift;

@@ -31,12 +31,14 @@ my $schema = OpenCloset::Schema->connect($db_opts);
 my $hostname = `hostname`;
 my $username = $ENV{USER};
 
+if ( $username eq 'opencloset' or $hostname =~ m/opencloset/ ) {
+    plan skip_all => 'Do not run on service host';
+}
+
+my $api = OpenCloset::API::Order->new( schema => $schema, notify => 0 );
+ok( $api, 'OpenCloset::API::Order->new' );
+
 subtest '포장 -> 포장완료' => sub {
-    plan skip_all => 'Do not run on service host' if $username eq 'opencloset' or $hostname =~ m/opencloset/;
-
-    my $api = OpenCloset::API::Order->new( schema => $schema, notify => 0 );
-    ok( $api, 'OpenCloset::API::Order->new' );
-
     my $order_param;
     $order_param = order_param($schema);
     $order_param->{user_id} = 2; # 3회 이상 대여자 id
@@ -153,6 +155,18 @@ subtest '포장 -> 포장완료' => sub {
     is( $discount, -9_000, '비율 할인쿠폰' );
     ok( $order->order_details( { name => '배송비' } )->next, '배송비' );
     ok( $order->order_details( { name => '에누리' } )->next, '에누리' );
+};
+
+subtest '포장완료 -> 결제대기' => sub {
+    my $order_param = order_param($schema);
+    $order_param->{user_id} = 2;
+
+    my $order   = $schema->resultset('Order')->create($order_param);
+    my @codes   = qw/0J001 0P001 0S003 0A001/;
+    my $success = $api->box2boxed( $order, \@codes );
+    $success = $api->boxed2payment($order);
+    ok( $success, 'boxed2payment' );
+    is( $order->status_id, $PAYMENT, 'status_id' );
 };
 
 done_testing();
