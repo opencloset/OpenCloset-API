@@ -4,11 +4,15 @@ use utf8;
 use strict;
 use warnings;
 
+use DateTime;
 use HTTP::Tiny;
+use Mojo::Loader qw/data_section/;
+use Mojo::Template;
 use Try::Tiny;
 
-use OpenCloset::Constants::Category ();
-use OpenCloset::Constants::Status qw/$BOX $BOXED $PAYMENT $CHOOSE_CLOTHES $CHOOSE_ADDRESS $PAYMENT $PAYMENT_DONE $WAITING_DEPOSIT $PAYBACK/;
+use OpenCloset::API::SMS;
+use OpenCloset::Constants::Category;
+use OpenCloset::Constants::Status qw/$RENTAL $BOX $BOXED $PAYMENT/;
 
 use OpenCloset::DB::Plugin::Order::Sale;
 
@@ -46,6 +50,13 @@ notify - Boolean
 monitor 서비스로 상태변경 event 를 알립니다.
 default 는 true 입니다.
 
+=item *
+
+sms - Boolean
+
+사용자에게 상태에 따라 SMS 를 전송합니다.
+default 는 true 입니다.
+
 =back
 
 =cut
@@ -56,6 +67,7 @@ sub new {
     my $self = {
         schema => $args{schema},
         notify => $args{notify} // 1,
+        sms    => $args{sms} // 1,
         http   => HTTP::Tiny->new(
             timeout         => 3,
             default_headers => {
@@ -242,15 +254,25 @@ sub box2boxed {
 
     return 1 unless $self->{notify};
 
-    my $res = $self->notify( $order, $BOX, $BOXED );
-    warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
-
+    $self->notify( $order, $BOX, $BOXED );
     return 1;
 }
 
 =head2 boxed2payment( $order )
 
     my $success = $api->boxed2payment($order);
+
+=over
+
+=item *
+
+주문서의 상태를 C<$PAYMENT> 로 변경
+
+=item *
+
+opencloset/monitor 에 event 전달
+
+=back
 
 =cut
 
@@ -262,8 +284,175 @@ sub boxed2payment {
 
     return 1 unless $self->{notify};
 
-    my $res = $self->notify( $order, $BOXED, $PAYMENT );
-    warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
+    $self->notify( $order, $BOXED, $PAYMENT );
+    return 1;
+}
+
+=head2 payment2rental( $order, $additional_days? )
+
+    my $success = $api->payment2rental($order, 4);
+
+=head3 Args
+
+=over
+
+=item *
+
+C<$order> - L<OpenCloset::Schema::Result::Order> obj
+
+=item *
+
+연장일수 C<$additional_days> - default is C<0>
+
+=over
+
+=item *
+
+대여기간에 따라 반납희망일(C<user_target_date>)과 연장일(C<additional_day>)을 변경
+
+=item *
+
+대여일(C<rental_date>)을 현재시간으로 지정
+
+=item *
+
+결제방법(C<price_pay_with>)을 저장
+
+=item *
+
+주문서의 상태를 C<$RENTAL> 로 변경
+
+=item *
+
+쿠폰의 상태를 변경
+
+=item *
+
+의류(clothes)의 상태를 C<$RENTAL> 로 변경
+
+=item *
+
+주문내역 의류(order_detail)의 상태를 C<$RENTAL> 로 변경
+
+=item *
+
+대여자에게 주문내용 및 반납안내 SMS 전송
+
+=item *
+
+대여자에게 기증이야기 SMS 전송
+
+=item *
+
+monitor 에 이벤트 알림
+
+=back
+
+=cut
+
+our $DEFAULT_RENTAL_DAYS = 3; # 3박4일
+
+sub payment2rental {
+    my ( $self, $order, $additional_days ) = @_;
+    return unless $order;
+
+    my $schema = $self->{schema};
+    my $guard  = $schema->txn_scope_guard;
+
+    my ( $success, $error ) = try {
+        my $tz          = $order->create_date->time_zone;
+        my $rental_date = DateTime->today( time_zone => $tz->name );
+        my %update      = ( status_id => $RENTAL, rental_date => $rental_date->datetime );
+
+        if ( $additional_days and $additional_days > 0 ) {
+            $update{additional_day} = $additional_days;
+            my $user_target_date = $rental_date->clone->truncate( to => 'day' );
+            $user_target_date->add( days => $DEFAULT_RENTAL_DAYS + $additional_days );
+            $user_target_date->set( hour => 23, minute => 59, second => 59 );
+            $update{user_target_date} = $user_target_date->datetime;
+        }
+
+        ## update order status_id rental_date, additional_day and user_target_date
+        $order->update( \%update );
+
+        ## update clohtes.status_id to $RENTAL
+        $order->clothes->update_all( { status_id => $RENTAL } );
+
+        ## update order_details.status_id to $RENTAL
+        $order->order_details( { clothes_code => { '!=' => undef } } )->update_all( { status_id => $RENTAL } );
+
+        if ( my $coupon = $order->coupon ) {
+            if ( $order->price_pay_with =~ m/쿠폰/ ) {
+                $coupon->update( { status => 'used' } );
+            }
+        }
+
+        $guard->commit;
+        return 1;
+    }
+    catch {
+        my $err = $_;
+        return ( undef, $err );
+    };
+
+    unless ($success) {
+        my $order_id = $order->id;
+        warn "Failed to execute payment2rental($order_id): $error";
+        return;
+    }
+
+    $self->notify( $order, $PAYMENT, $RENTAL ) if $self->{notify};
+
+    return 1 unless $self->{sms};
+
+    my $user      = $order->user;
+    my $user_info = $user->user_info;
+    my $sms       = OpenCloset::API::SMS->new( schema => $schema );
+
+    my $mt  = Mojo::Template->new;
+    my $tpl = data_section __PACKAGE__, 'order-confirm-1.txt';
+    my $msg = $mt->render( $tpl, $order, $user );
+    chomp $msg;
+
+    $sms->send( to => $user_info->phone, msg => $msg );
+
+    ## GH #949 - 기증 이야기 안내를 별도의 문자로 전송
+    my @clothes;
+    for my $clothes ( $order->clothes ) {
+        my $donation = $clothes->donation;
+        next unless $donation;
+        next unless $donation->message;
+
+        push @clothes, $clothes;
+    }
+
+    if (@clothes) {
+        my %SCORE = (
+            $JACKET    => 10,
+            $PANTS     => 20,
+            $SKIRT     => 30,
+            $ONEPIECE  => 40,
+            $COAT      => 50,
+            $WAISTCOAT => 60,
+            $SHIRT     => 70,
+            $BLOUSE    => 80,
+            $TIE       => 90,
+            $BELT      => 100,
+            $SHOES     => 110,
+            $MISC      => 120,
+        );
+
+        my @sorted_clothes = sort { $SCORE{ $a->category } <=> $SCORE{ $b->category } } @clothes;
+        my $first          = $sorted_clothes[0];
+        my $donation       = $first->donation;
+        my $category       = $OpenCloset::Constants::Category::LABEL_MAP{ $first->category };
+
+        $tpl = data_section __PACKAGE__, 'order-confirm-2.txt';
+        $msg = $mt->render( $tpl, $order, $user, $donation, $category );
+        chomp $msg;
+
+        $sms->send( to => $user_info->phone, msg => $msg );
+    }
 
     return 1;
 }
@@ -285,6 +474,7 @@ sub notify {
         { sender => 'order', order_id => $order->id, from => $from, to => $to }
     );
 
+    warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
     return $res;
 }
 
@@ -314,3 +504,31 @@ Copyright (c) 2017 열린옷장
 =cut
 
 1;
+
+__DATA__
+
+@@ order-confirm-1.txt
+% my ($order, $user) = @_;
+[열린옷장] <%= $user->name %>님 안녕하세요. 택배반납을 하시거나 연장신청이 필요한 경우, 본 문자를 보관하고 계시다가 반드시 아래 주소를 클릭하여 정보를 입력해주세요. 정보 미입력시 미반납, 연체 상황이 발생할 수 있으므로 반드시 본 정보 작성을 요청드립니다. 감사합니다.
+
+1. 택배로 발송을 하신 경우: https://staff.theopencloset.net/order/<%= $order->id %>/return/ 를 클릭하여 반납택배 발송알리미를 작성해주세요.
+
+서울시 광진구 아차산로 213(화양동 48-3번지) 웅진빌딩 403호 열린옷장
+
+2. 대여기간을 연장 하려는 경우: https://staff.theopencloset.net/order/<%= $order->id %>/extension/ 를 클릭하여 대여기간 연장신청서를 작성해주세요.
+
+@@ order-confirm-2.txt
+% my ($order, $user, $donation, $category) = @_;
+% my $donator = $donation->user;
+[열린옷장] 안녕하세요. <%= $user->name %>님.
+<%= $category %> 기증자 <%= $donator->name %>님의 기증 편지를 읽어보세요.
+
+----
+
+<%= $donation->message %>
+
+----
+
+<%= $user->name %>님이 대여하신 다른 의류의 기증자 이야기를 읽으시려면 URL을 클릭해 주세요.
+
+https://story.theopencloset.net/letters/o/<%= $order->id %>/d
