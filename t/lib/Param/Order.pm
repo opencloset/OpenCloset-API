@@ -14,10 +14,10 @@ sub order_param {
 
     my $now = DateTime->now( time_zone => 'Asia/Seoul' );
     my $today = $now->clone->truncate( to => 'day' );
-    $today->set( hour => 10 );
+    my $booking_date = $today->clone->set( hour => 10 );
     my $booking = $schema->resultset('Booking')->find_or_create(
         {
-            date   => "$today",
+            date   => "$booking_date",
             gender => 'male',
             slot   => 4,
         }
@@ -34,9 +34,9 @@ sub order_param {
         online                => 0,
         additional_day        => 0,
         rental_date           => undef,
-        wearon_date           => $today->clone->add( days => 1 )->truncate( to => 'day' )->datetime,
-        target_date           => $today->clone->add( days => 4 )->truncate( to => 'day' )->datetime,
-        user_target_date      => $today->clone->add( days => 4 )->truncate( to => 'day' )->datetime,
+        wearon_date           => $today->clone->add( days => 1 )->datetime,
+        target_date           => $today->clone->add( days => 3 )->set( hour => 23, minute => 59, second => 59 )->datetime,
+        user_target_date      => $today->clone->add( days => 3 )->set( hour => 23, minute => 59, second => 59 )->datetime,
         return_date           => undef,
         return_method         => undef,
         return_memo           => undef,
