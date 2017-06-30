@@ -66,13 +66,20 @@ sub send {
     $to =~ s/[^0-9]//g;
     $from =~ s/[^0-9]//g;
 
-    return $self->{schema}->resultset('SMS')->create(
+    my $sms = $self->{schema}->resultset('SMS')->create(
         {
             from => $from,
             to   => $to,
             text => $args{msg}
         }
     );
+
+    unless ($sms) {
+        warn "Failed to create a new SMS: $args{msg}";
+        return;
+    }
+
+    return $sms;
 }
 
 =head1 AUTHOR

@@ -1,5 +1,6 @@
 requires 'DateTime';
 requires 'HTTP::Tiny';
+requires 'Mojolicious';    # Mojo::Loader, Mojo::Template
 requires 'Try::Tiny';
 
 # cpan.theopencloset.net

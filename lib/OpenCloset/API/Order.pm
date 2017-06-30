@@ -6,9 +6,12 @@ use warnings;
 
 use DateTime;
 use HTTP::Tiny;
+use Mojo::Loader qw/data_section/;
+use Mojo::Template;
 use Try::Tiny;
 
-use OpenCloset::Constants::Category ();
+use OpenCloset::API::SMS;
+use OpenCloset::Constants::Category;
 use OpenCloset::Constants::Status qw/$RENTAL $BOX $BOXED $PAYMENT/;
 
 use OpenCloset::DB::Plugin::Order::Sale;
@@ -390,7 +393,54 @@ sub payment2rental {
         return;
     }
 
-    ## SMS 보내자
+    my $user      = $order->user;
+    my $user_info = $user->user_info;
+    my $sms       = OpenCloset::API::SMS->new( schema => $schema );
+
+    my $mt  = Mojo::Template->new;
+    my $tpl = data_section __PACKAGE__, 'order-confirm-1.txt';
+    my $msg = $mt->render( $tpl, $order, $user );
+    chomp $msg;
+
+    $sms->send( to => $user_info->phone, msg => $msg );
+
+    ## GH #949 - 기증 이야기 안내를 별도의 문자로 전송
+    my @clothes;
+    for my $clothes ( $order->clothes ) {
+        my $donation = $clothes->donation;
+        next unless $donation;
+        next unless $donation->message;
+
+        push @clothes, $clothes;
+    }
+
+    if (@clothes) {
+        my %SCORE = (
+            $JACKET    => 10,
+            $PANTS     => 20,
+            $SKIRT     => 30,
+            $ONEPIECE  => 40,
+            $COAT      => 50,
+            $WAISTCOAT => 60,
+            $SHIRT     => 70,
+            $BLOUSE    => 80,
+            $TIE       => 90,
+            $BELT      => 100,
+            $SHOES     => 110,
+            $MISC      => 120,
+        );
+
+        my @sorted_clothes = sort { $SCORE{ $a->category } <=> $SCORE{ $b->category } } @clothes;
+        my $first          = $sorted_clothes[0];
+        my $donation       = $first->donation;
+        my $category       = $OpenCloset::Constants::Category::LABEL_MAP{ $first->category };
+
+        $tpl = data_section __PACKAGE__, 'order-confirm-2.txt';
+        $msg = $mt->render( $tpl, $order, $user, $donation, $category );
+        chomp $msg;
+
+        $sms->send( to => $user_info->phone, msg => $msg );
+    }
 
     return 1 unless $self->{notify};
 
@@ -445,3 +495,31 @@ Copyright (c) 2017 열린옷장
 =cut
 
 1;
+
+__DATA__
+
+@@ order-confirm-1.txt
+% my ($order, $user) = @_;
+[열린옷장] <%= $user->name %>님 안녕하세요. 택배반납을 하시거나 연장신청이 필요한 경우, 본 문자를 보관하고 계시다가 반드시 아래 주소를 클릭하여 정보를 입력해주세요. 정보 미입력시 미반납, 연체 상황이 발생할 수 있으므로 반드시 본 정보 작성을 요청드립니다. 감사합니다.
+
+1. 택배로 발송을 하신 경우: https://staff.theopencloset.net/order/<%= $order->id %>/return/ 를 클릭하여 반납택배 발송알리미를 작성해주세요.
+
+서울시 광진구 아차산로 213(화양동 48-3번지) 웅진빌딩 403호 열린옷장
+
+2. 대여기간을 연장 하려는 경우: https://staff.theopencloset.net/order/<%= $order->id %>/extension/ 를 클릭하여 대여기간 연장신청서를 작성해주세요.
+
+@@ order-confirm-2.txt
+% my ($order, $user, $donation, $category) = @_;
+% my $donator = $donation->user;
+[열린옷장] 안녕하세요. <%= $user->name %>님.
+<%= $category %> 기증자 <%= $donator->name %>님의 기증 편지를 읽어보세요.
+
+----
+
+<%= $donation->message %>
+
+----
+
+<%= $user->name %>님이 대여하신 다른 의류의 기증자 이야기를 읽으시려면 URL을 클릭해 주세요.
+
+https://story.theopencloset.net/letters/o/<%= $order->id %>/d
