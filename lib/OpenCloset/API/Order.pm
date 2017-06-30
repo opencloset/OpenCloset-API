@@ -4,11 +4,12 @@ use utf8;
 use strict;
 use warnings;
 
+use DateTime;
 use HTTP::Tiny;
 use Try::Tiny;
 
 use OpenCloset::Constants::Category ();
-use OpenCloset::Constants::Status qw/$BOX $BOXED $PAYMENT $CHOOSE_CLOTHES $CHOOSE_ADDRESS $PAYMENT $PAYMENT_DONE $WAITING_DEPOSIT $PAYBACK/;
+use OpenCloset::Constants::Status qw/$RENTAL $BOX $BOXED $PAYMENT/;
 
 use OpenCloset::DB::Plugin::Order::Sale;
 
@@ -242,15 +243,25 @@ sub box2boxed {
 
     return 1 unless $self->{notify};
 
-    my $res = $self->notify( $order, $BOX, $BOXED );
-    warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
-
+    $self->notify( $order, $BOX, $BOXED );
     return 1;
 }
 
 =head2 boxed2payment( $order )
 
     my $success = $api->boxed2payment($order);
+
+=over
+
+=item *
+
+주문서의 상태를 C<$PAYMENT> 로 변경
+
+=item *
+
+opencloset/monitor 에 event 전달
+
+=back
 
 =cut
 
@@ -262,9 +273,128 @@ sub boxed2payment {
 
     return 1 unless $self->{notify};
 
-    my $res = $self->notify( $order, $BOXED, $PAYMENT );
-    warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
+    $self->notify( $order, $BOXED, $PAYMENT );
+    return 1;
+}
 
+=head2 payment2rental( $order, $additional_days? )
+
+    my $success = $api->payment2rental($order, 4);
+
+=head3 Args
+
+=over
+
+=item *
+
+C<$order> - L<OpenCloset::Schema::Result::Order> obj
+
+=item *
+
+연장일수 C<$additional_days> - default is C<0>
+
+=over
+
+=item *
+
+대여기간에 따라 반납희망일(C<user_target_date>)과 연장일(C<additional_day>)을 변경
+
+=item *
+
+대여일(C<rental_date>)을 현재시간으로 지정
+
+=item *
+
+결제방법(C<price_pay_with>)을 저장
+
+=item *
+
+주문서의 상태를 C<$RENTAL> 로 변경
+
+=item *
+
+쿠폰의 상태를 변경
+
+=item *
+
+의류(clothes)의 상태를 C<$RENTAL> 로 변경
+
+=item *
+
+주문내역 의류(order_detail)의 상태를 C<$RENTAL> 로 변경
+
+=item *
+
+대여자에게 주문내용 및 반납안내 SMS 전송
+
+=item *
+
+대여자에게 기증이야기 SMS 전송
+
+=item *
+
+monitor 에 이벤트 알림
+
+=back
+
+=cut
+
+our $DEFAULT_RENTAL_DAYS = 3; # 3박4일
+
+sub payment2rental {
+    my ( $self, $order, $additional_days ) = @_;
+    return unless $order;
+
+    my $schema = $self->{schema};
+    my $guard  = $schema->txn_scope_guard;
+
+    my ( $success, $error ) = try {
+        my $tz          = $order->create_date->time_zone;
+        my $rental_date = DateTime->today( time_zone => $tz->name );
+        my %update      = ( status_id => $RENTAL, rental_date => $rental_date->datetime );
+
+        if ( $additional_days and $additional_days > 0 ) {
+            $update{additional_day} = $additional_days;
+            my $user_target_date = $rental_date->clone->truncate( to => 'day' );
+            $user_target_date->add( days => $DEFAULT_RENTAL_DAYS + $additional_days );
+            $user_target_date->set( hour => 23, minute => 59, second => 59 );
+            $update{user_target_date} = $user_target_date->datetime;
+        }
+
+        ## update order status_id rental_date, additional_day and user_target_date
+        $order->update( \%update );
+
+        ## update clohtes.status_id to $RENTAL
+        $order->clothes->update_all( { status_id => $RENTAL } );
+
+        ## update order_details.status_id to $RENTAL
+        $order->order_details( { clothes_code => { '!=' => undef } } )->update_all( { status_id => $RENTAL } );
+
+        if ( my $coupon = $order->coupon ) {
+            if ( $order->price_pay_with =~ m/쿠폰/ ) {
+                $coupon->update( { status => 'used' } );
+            }
+        }
+
+        $guard->commit;
+        return 1;
+    }
+    catch {
+        my $err = $_;
+        return ( undef, $err );
+    };
+
+    unless ($success) {
+        my $order_id = $order->id;
+        warn "Failed to execute payment2rental($order_id): $error";
+        return;
+    }
+
+    ## SMS 보내자
+
+    return 1 unless $self->{notify};
+
+    $self->notify( $order, $PAYMENT, $RENTAL );
     return 1;
 }
 
@@ -285,6 +415,7 @@ sub notify {
         { sender => 'order', order_id => $order->id, from => $from, to => $to }
     );
 
+    warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
     return $res;
 }
 

@@ -2,10 +2,12 @@ use utf8;
 use strict;
 use warnings;
 
+use DateTime;
+
 use open ':std', ':encoding(utf8)';
 use Test::More;
 
-use OpenCloset::Constants::Status qw/$RENTABLE $BOXED $PAYMENT/;
+use OpenCloset::Constants::Status qw/$RENTABLE $RENTAL $BOXED $PAYMENT/;
 use OpenCloset::Schema;
 use OpenCloset::Calculator::LateFee;
 
@@ -167,6 +169,32 @@ subtest '포장완료 -> 결제대기' => sub {
     $success = $api->boxed2payment($order);
     ok( $success, 'boxed2payment' );
     is( $order->status_id, $PAYMENT, 'status_id' );
+};
+
+subtest '결제대기 -> 대여중' => sub {
+    my $order_param = order_param($schema);
+    $order_param->{user_id} = 2;
+
+    my $order = $schema->resultset('Order')->create($order_param);
+    my @codes = qw/0J001 0P001 0S003 0A001/;
+    $api->box2boxed( $order, \@codes );
+    $api->boxed2payment($order);
+    my $success = $api->payment2rental($order);
+    ok( $success, 'payment2rental' );
+    is( $order->status_id, $RENTAL, 'status_id' );
+
+    $order_param = order_param($schema);
+    $order_param->{user_id} = 2;
+
+    $order = $schema->resultset('Order')->create($order_param);
+    $api->box2boxed( $order, \@codes );
+    $api->boxed2payment($order);
+    $success = $api->payment2rental( $order, 2 );
+
+    my $today = DateTime->today( time_zone => 'Asia/Seoul' );
+    my $user_target_date = $today->add( days => 3 + 2 )->set( hour => 23, minute => 59, second => 59 );
+    is( $order->additional_day, 2, 'additional_day' );
+    is( $order->user_target_date->datetime, $user_target_date->datetime, 'user_target_date' );
 };
 
 done_testing();

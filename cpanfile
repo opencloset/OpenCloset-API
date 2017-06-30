@@ -1,3 +1,4 @@
+requires 'DateTime';
 requires 'HTTP::Tiny';
 requires 'Try::Tiny';
 
