@@ -50,6 +50,13 @@ notify - Boolean
 monitor 서비스로 상태변경 event 를 알립니다.
 default 는 true 입니다.
 
+=item *
+
+sms - Boolean
+
+사용자에게 상태에 따라 SMS 를 전송합니다.
+default 는 true 입니다.
+
 =back
 
 =cut
@@ -60,6 +67,7 @@ sub new {
     my $self = {
         schema => $args{schema},
         notify => $args{notify} // 1,
+        sms    => $args{sms} // 1,
         http   => HTTP::Tiny->new(
             timeout         => 3,
             default_headers => {
@@ -393,6 +401,10 @@ sub payment2rental {
         return;
     }
 
+    $self->notify( $order, $PAYMENT, $RENTAL ) if $self->{notify};
+
+    return 1 unless $self->{sms};
+
     my $user      = $order->user;
     my $user_info = $user->user_info;
     my $sms       = OpenCloset::API::SMS->new( schema => $schema );
@@ -442,9 +454,6 @@ sub payment2rental {
         $sms->send( to => $user_info->phone, msg => $msg );
     }
 
-    return 1 unless $self->{notify};
-
-    $self->notify( $order, $PAYMENT, $RENTAL );
     return 1;
 }
 
