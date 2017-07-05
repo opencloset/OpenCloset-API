@@ -179,7 +179,7 @@ subtest '결제대기 -> 대여중' => sub {
     my @codes = qw/0J001 0P001 0S003 0A001/;
     $api->box2boxed( $order, \@codes );
     $api->boxed2payment($order);
-    my $success = $api->payment2rental($order);
+    my $success = $api->payment2rental( $order, '현금' );
     ok( $success, 'payment2rental' );
     is( $order->status_id, $RENTAL, 'status_id' );
 
@@ -189,7 +189,7 @@ subtest '결제대기 -> 대여중' => sub {
     $order = $schema->resultset('Order')->create($order_param);
     $api->box2boxed( $order, \@codes );
     $api->boxed2payment($order);
-    $success = $api->payment2rental( $order, 2 );
+    $success = $api->payment2rental( $order, '카드', 2 );
 
     my $today = DateTime->today( time_zone => 'Asia/Seoul' );
     my $user_target_date = $today->add( days => 3 + 2 )->set( hour => 23, minute => 59, second => 59 );

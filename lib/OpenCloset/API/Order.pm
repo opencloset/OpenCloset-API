@@ -288,9 +288,9 @@ sub boxed2payment {
     return 1;
 }
 
-=head2 payment2rental( $order, $additional_days? )
+=head2 payment2rental( $order, $pay_with, $additional_days? )
 
-    my $success = $api->payment2rental($order, 4);
+    my $success = $api->payment2rental($order, '현금', 4);
 
 =head3 Args
 
@@ -302,7 +302,15 @@ C<$order> - L<OpenCloset::Schema::Result::Order> obj
 
 =item *
 
+C<$pay_with> - 결제방법
+
+=item *
+
 연장일수 C<$additional_days> - default is C<0>
+
+=back
+
+=head3 Desc
 
 =over
 
@@ -353,8 +361,13 @@ monitor 에 이벤트 알림
 our $DEFAULT_RENTAL_DAYS = 3; # 3박4일
 
 sub payment2rental {
-    my ( $self, $order, $additional_days ) = @_;
+    my ( $self, $order, $pay_with, $additional_days ) = @_;
     return unless $order;
+
+    unless ($pay_with) {
+        warn "pay_with is required";
+        return;
+    }
 
     my $schema = $self->{schema};
     my $guard  = $schema->txn_scope_guard;
@@ -362,7 +375,11 @@ sub payment2rental {
     my ( $success, $error ) = try {
         my $tz          = $order->create_date->time_zone;
         my $rental_date = DateTime->today( time_zone => $tz->name );
-        my %update      = ( status_id => $RENTAL, rental_date => $rental_date->datetime );
+        my %update      = (
+            status_id      => $RENTAL,
+            price_pay_with => $pay_with,
+            rental_date    => $rental_date->datetime,
+        );
 
         if ( $additional_days and $additional_days > 0 ) {
             $update{additional_day} = $additional_days;
@@ -382,7 +399,7 @@ sub payment2rental {
         $order->order_details( { clothes_code => { '!=' => undef } } )->update_all( { status_id => $RENTAL } );
 
         if ( my $coupon = $order->coupon ) {
-            if ( $order->price_pay_with =~ m/쿠폰/ ) {
+            if ( $pay_with =~ m/쿠폰/ ) {
                 $coupon->update( { status => 'used' } );
             }
         }
