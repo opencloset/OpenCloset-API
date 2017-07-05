@@ -11,8 +11,9 @@ use Mojo::Template;
 use Try::Tiny;
 
 use OpenCloset::API::SMS;
+use OpenCloset::Calculator::LateFee;
 use OpenCloset::Constants::Category;
-use OpenCloset::Constants::Status qw/$RENTAL $BOX $BOXED $PAYMENT/;
+use OpenCloset::Constants::Status qw/$RENTAL $BOX $BOXED $PAYMENT $RETURNED/;
 
 use OpenCloset::DB::Plugin::Order::Sale;
 
@@ -24,8 +25,10 @@ OpenCloset::API::Order - 주문서의 상태변경 API
 
 =head1 SYNOPSIS
 
-    my $api = OpenCloset::API::Order(schema => $schema);
-    my $success = $api->box2boxed($order, ['J001', 'P001']);    # 포장 -> 포장완료
+    my $api = OpenCloset::API::Order->new(schema => $schema);
+    $api->box2boxed($order, ['J001', 'P001']);    # 포장 -> 포장완료
+    $api->boxed2payment($order);                  # 포장완료 -> 결제대기
+    $api->payment2rental($order, '현금');          # 결제대기 -> 대여중
 
 =cut
 
@@ -470,6 +473,209 @@ sub payment2rental {
 
         $sms->send( to => $user_info->phone, msg => $msg );
     }
+
+    return 1;
+}
+
+=head2 rental2returned( $order, $return_date, $extra? )
+
+    my $success = $api->rental2returned($order);
+
+=head3 Args
+
+=over
+
+=item *
+
+C<$order> - L<OpenCloset::Schema::Result::Order> obj
+
+=back
+
+=head3 Desc
+
+=over
+
+=item *
+
+반납일을 변경
+
+=item *
+
+연체/연장료 납부방법을 저장(C<late_fee_pay_with>)
+
+=item *
+
+연체료 항목을 추가(stage: 1)
+
+    연체료: 30,000 x 30% x 2일
+
+=item *
+
+연장료 항목을 추가(stage: 1)
+
+    연장료: 30,000 x 20% x 2일
+
+=item *
+
+연체/연장료 에누리 항목 추가(stage: 1)
+
+    연체/연장료 에누리
+
+=item *
+
+배상비 항목을 추가(stage: 2)
+
+=item *
+
+배상비 에누리 항목을 추가(stage: 2)
+
+=item *
+
+주문서의 상태를 C<$RETURNED> 로 변경
+
+=item *
+
+주문내역 및 주문내역의 의류의 상태를 C<$RETURNED> 로 변경
+
+=item *
+
+대여자에게 반납문자 전송
+
+=item *
+
+monitor 에 이벤트 알림
+
+=back
+
+=cut
+
+sub rental2returned {
+    my ( $self, $order, $return_date, $extra ) = @_;
+    return unless $order;
+
+    unless ($return_date) {
+        my $tz = $order->create_date->time_zone;
+        $return_date = DateTime->now( time_zone => $tz );
+    }
+
+    my $schema = $self->{schema};
+    my $guard  = $schema->txn_scope_guard;
+    my $calc   = OpenCloset::Calculator::LateFee->new;
+
+    my ( $success, $error ) = try {
+        my $is_late = 0;
+        my $late_fee_pay_with;
+        if ( my $extension_days = $calc->extension_days( $order, $return_date->datetime ) ) {
+            my $pay_with = $extra->{late_fee_pay_with};
+            die "late_fee_pay_with is required" unless $pay_with;
+
+            my $price = $calc->rental_price($order);
+            my $rate  = $OpenCloset::Calculator::LateFee::EXTENSION_RATE;
+
+            $order->create_related(
+                'order_details',
+                {
+                    name        => '연장료',
+                    price       => $price * $rate,
+                    final_price => $price * $rate * $extension_days,
+                    stage       => 1,
+                    desc        => sprintf( '%s원 x %d%% x %d일', $self->commify($price), $rate * 100, $extension_days ),
+                    pay_with    => $pay_with,
+                }
+            ) or die "Failed to create a new order_detail for 연장료";
+
+            $is_late++;
+            $late_fee_pay_with = $pay_with;
+        }
+
+        if ( my $overdue_days = $calc->overdue_days( $order, $return_date->datetime ) ) {
+            my $pay_with = $extra->{late_fee_pay_with};
+            die "late_fee_pay_with is required" unless $pay_with;
+
+            my $price = $calc->rental_price($order);
+            my $rate  = $OpenCloset::Calculator::LateFee::OVERDUE_RATE;
+
+            $order->create_related(
+                'order_details',
+                {
+                    name        => '연체료',
+                    price       => $price * $rate,
+                    final_price => $price * $rate * $overdue_days,
+                    stage       => 1,
+                    desc        => sprintf( '%s원 x %d%% x %d일', $self->commify($price), $rate * 100, $overdue_days ),
+                    pay_with    => $pay_with,
+                }
+            ) or die "Failed to create a new order_detail for 연체료";
+
+            $is_late++;
+            $late_fee_pay_with = $pay_with;
+        }
+
+        if ( $is_late and my $discount = $extra->{late_fee_discount} ) {
+            $order->create_related(
+                'order_details',
+                {
+                    name        => '연체/연장료 에누리',
+                    price       => $discount,
+                    final_price => $discount,
+                    stage       => 1,
+                }
+            ) or die "Failed to create a new order_detail for 연체/연장료 에누리";
+        }
+
+        if ( my $compensation_price = $extra->{compensation_price} ) {
+            $order->create_related(
+                'order_details',
+                {
+                    name        => '배상비',
+                    price       => $compensation_price,
+                    final_price => $compensation_price,
+                    stage       => 2,
+                }
+            ) or die "Failed to create a new order_detail for 배상비";
+
+            if ( my $discount = $extra->{compensation_discount} ) {
+                $order->create_related(
+                    'order_details',
+                    {
+                        name        => '배상비 에누리',
+                        price       => $discount,
+                        final_price => $discount,
+                        stage       => 2,
+                    }
+                ) or die "Failed to create a new order_detail for 배상비 에누리";
+            }
+        }
+
+        $order->update(
+            {
+                status_id         => $RETURNED,
+                return_date       => $return_date->datetime,
+                late_fee_pay_with => $late_fee_pay_with,
+            }
+        );
+        $order->clothes->update_all( { status_id => $RETURNED } );
+        $order->order_details( { clothes_code => { '!=' => undef } } )->update_all( { status_id => $RETURNED } );
+
+        $guard->commit;
+        return 1;
+    }
+    catch {
+        my $err = $_;
+        return ( undef, $err );
+    };
+
+    unless ($success) {
+        my $order_id = $order->id;
+        warn "Failed to execute rental2returned($order_id): $error";
+        return;
+    }
+
+    $self->notify( $order, $RENTAL, $RETURNED ) if $self->{notify};
+    return 1 unless $self->{sms};
+
+    ## TODO
+    ## "[열린옷장] #{username}님의 의류가 정상적으로 반납되었습니다. 감사합니다." sms
 
     return 1;
 }
