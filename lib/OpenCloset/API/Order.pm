@@ -723,6 +723,78 @@ sub rental2returned {
     return 1;
 }
 
+=head2 additional_day( $order, $days )
+
+    my $success = $api->additional_day($order, 2);    # 2일 연장
+
+반납희망일(C<order.user_target_date>)과 최종금액(C<order_detail.final_price>)을 변경합니다.
+
+=over
+
+=item *
+
+C<$order> - L<OpenCloset::Schema::Result::Order> obj
+
+=item *
+
+$days - 연장일
+
+=back
+
+=cut
+
+sub additional_day {
+    my ( $self, $order, $days ) = @_;
+    return unless $order;
+    return unless $days;
+
+    if ( $order->status_id != $PAYMENT ) {
+        warn "status_id should be 'PAYMENT'";
+        return;
+    }
+
+    if ( $days < 0 ) {
+        warn "additional_day should be over than 0";
+        return;
+    }
+
+    my $user_target_date = $order->user_target_date;
+    $user_target_date->add( days => $days );
+
+    my $schema = $self->{schema};
+    my $guard  = $schema->txn_scope_guard;
+    my ( $success, $error ) = try {
+        $order->update(
+            {
+                additional_day   => $days,
+                user_target_date => $user_target_date->datetime,
+            }
+        );
+
+        my $details = $order->order_details( { stage => 0, clothes_code => { '!=' => undef } } );
+        while ( my $detail = $details->next ) {
+            my $price       = $detail->price;
+            my $final_price = $price + $price * $OpenCloset::Calculator::LateFee::EXTENSION_RATE * $days;
+            $detail->update( { final_price => $final_price } );
+        }
+
+        $guard->commit;
+        return 1;
+    }
+    catch {
+        my $err = $_;
+        return ( undef, $err );
+    };
+
+    unless ($success) {
+        my $order_id = $order->id;
+        warn "Failed to execute additional_day($order_id): $error";
+        return;
+    }
+
+    return 1;
+}
+
 =head2 notify( $order, $status_from, $status_to )
 
     my $res = $self->notify($order, $BOXED, $PAYMENT);

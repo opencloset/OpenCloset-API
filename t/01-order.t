@@ -255,4 +255,25 @@ subtest '대여중 -> 반납' => sub {
     ok( $details->search( { name => '배상비 에누리' } )->next,        '배상비 에누리' );
 };
 
+subtest 'additional_day' => sub {
+    my $order_param = order_param($schema);
+    $order_param->{user_id} = 2;
+
+    my $order = $schema->resultset('Order')->create($order_param);
+    my @codes = qw/0J001 0P001 0S003 0A001/;
+    $api->box2boxed( $order, \@codes );
+    $api->boxed2payment($order);
+
+    my $user_target_date = $order->user_target_date->clone;
+
+    my $success = $api->additional_day( $order, 1 );
+
+    ok( $success, 'additional_day' );
+    is( $order->additional_day, 1, 'order->additional_day' );
+
+    my $detail = $order->order_details( { clothes_code => '0J001' } )->next;
+    is( $detail->final_price, 12_000, 'order_detail.final_price' );
+    is( $order->user_target_date->datetime, $user_target_date->add( days => 1 )->datetime, 'user_target_date' );
+};
+
 done_testing();
