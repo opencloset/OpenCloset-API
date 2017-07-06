@@ -7,7 +7,7 @@ use DateTime;
 use open ':std', ':encoding(utf8)';
 use Test::More;
 
-use OpenCloset::Constants::Status qw/$RENTABLE $RENTAL $BOXED $PAYMENT/;
+use OpenCloset::Constants::Status qw/$RENTABLE $RENTAL $BOXED $PAYMENT $RETURNED/;
 use OpenCloset::Schema;
 use OpenCloset::Calculator::LateFee;
 
@@ -131,11 +131,8 @@ subtest '포장 -> 포장완료' => sub {
     $rental_fee = $calc->price($order);
     $discount   = $calc->discount_price($order);
 
-    is( $rental_fee, 30_000, '대여비: jacket,pants,shirt,shoes' );
-
-    ## 단벌 할인쿠폰은 대여비를 기준으로 연체/연장비를 지급받음
-    ## 그래서 할인금액이 -30_000 이 아니라 0
-    is( $discount, 0, '단벌 할인쿠폰' );
+    is( $rental_fee, 30_000,  '대여비: jacket,pants,shirt,shoes' );
+    is( $discount,   -30_000, '단벌 할인쿠폰' );
 
     $coupon_param = coupon_param( $schema, 'rate' );
     $coupon = $schema->resultset('Coupon')->create($coupon_param);
@@ -195,6 +192,67 @@ subtest '결제대기 -> 대여중' => sub {
     my $user_target_date = $today->add( days => 3 + 2 )->set( hour => 23, minute => 59, second => 59 );
     is( $order->additional_day, 2, 'additional_day' );
     is( $order->user_target_date->datetime, $user_target_date->datetime, 'user_target_date' );
+
+    ## TODO: sms 내용 및 전송 여부
+};
+
+subtest '대여중 -> 반납' => sub {
+    my $order_param = order_param($schema);
+    $order_param->{user_id} = 2;
+
+    my $order = $schema->resultset('Order')->create($order_param);
+    my @codes = qw/0J001 0P001 0S003 0A001/;
+    $api->box2boxed( $order, \@codes );
+    $api->boxed2payment($order);
+    $api->payment2rental( $order, '현금' );
+    my $success = $api->rental2returned($order);
+    ok( $success, 'rental2returned' );
+    is( $order->status_id, $RETURNED, 'status_id' );
+
+    my $is_returned;
+
+    my $details = $order->order_details( { clothes_code => { '!=' => undef } } );
+    while ( my $detail = $details->next ) {
+        $is_returned = $detail->status_id == $RETURNED;
+    }
+    ok( $is_returned, 'order_detail.status_id' );
+
+    my $clothes = $order->clothes;
+    while ( my $c = $clothes->next ) {
+        $is_returned = $c->status_id == $RETURNED;
+    }
+    ok( $is_returned, 'clothes.status_id' );
+
+    $order = $schema->resultset('Order')->create($order_param);
+    $api->box2boxed( $order, \@codes );
+    $api->boxed2payment($order);
+    $api->payment2rental( $order, '현금' );
+
+    my $target_date      = $order->target_date;
+    my $user_target_date = $target_date->clone->add( days => 2 );
+    my $return_date      = $user_target_date->clone->add( days => 2 );
+    $order->update( { user_target_date => $user_target_date->datetime } );
+
+    $success = $api->rental2returned(
+        $order,
+        return_date           => $return_date,
+        late_fee_pay_with     => '현금',
+        late_fee_discount     => 1000,
+        compensation_pay_with => '카드',
+        compensation_price    => 2000,
+        compensation_discount => 1000,
+    );
+
+    ok( $success, 'rental2returned' );
+    is( $order->late_fee_pay_with,     '현금', 'late_fee_pay_with' );
+    is( $order->compensation_pay_with, '카드', 'compensation_pay_with' );
+
+    $details = $order->order_details;
+    ok( $details->search( { name => '연장료' } )->next,                  '연장료' );
+    ok( $details->search( { name => '연체료' } )->next,                  '연체료' );
+    ok( $details->search( { name => '연체/연장료 에누리' } )->next, '연체/연장료 에누리' );
+    ok( $details->search( { name => '배상비' } )->next,                  '배상비' );
+    ok( $details->search( { name => '배상비 에누리' } )->next,        '배상비 에누리' );
 };
 
 done_testing();

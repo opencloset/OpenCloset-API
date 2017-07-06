@@ -477,17 +477,46 @@ sub payment2rental {
     return 1;
 }
 
-=head2 rental2returned( $order, $return_date, $extra? )
+=head2 rental2returned( $order, %extra )
 
-    my $success = $api->rental2returned($order);
+    my $success = $api->rental2returned($order, return_date => $return_date);
 
-=head3 Args
+=head3 Arguments
 
 =over
 
 =item *
 
 C<$order> - L<OpenCloset::Schema::Result::Order> obj
+
+=item *
+
+C<%extra> - 조건에 따라 필수 값이 달라집니다.
+
+=over
+
+=item *
+
+C<return_date> - L<DateTime> obj
+default 는 C<now()> 입니다.
+
+=item *
+
+C<late_fee_pay_with> - 연체/연장료 납부 방법
+
+=item *
+
+C<late_fee_discount> - 연체/연장료 에누리
+
+=item *
+
+C<compensation_price> - 배상비
+
+=item *
+
+C<compensation_discount> - 배상비 에누리
+
+=back
 
 =back
 
@@ -502,6 +531,10 @@ C<$order> - L<OpenCloset::Schema::Result::Order> obj
 =item *
 
 연체/연장료 납부방법을 저장(C<late_fee_pay_with>)
+
+=item *
+
+배상료 납부방법을 저장(C<compensation_pay_with>)
 
 =item *
 
@@ -550,25 +583,40 @@ monitor 에 이벤트 알림
 =cut
 
 sub rental2returned {
-    my ( $self, $order, $return_date, $extra ) = @_;
+    my ( $self, $order, %extra ) = @_;
     return unless $order;
 
+    my $return_date = $extra{return_date};
     unless ($return_date) {
         my $tz = $order->create_date->time_zone;
         $return_date = DateTime->now( time_zone => $tz );
     }
 
+    my $is_late;
+    my $late_fee_pay_with     = $extra{late_fee_pay_with};
+    my $late_fee_discount     = $extra{late_fee_discount};
+    my $compensation_pay_with = $extra{compensation_pay_with};
+    my $compensation_price    = $extra{compensation_price};
+    my $compensation_discount = $extra{compensation_discount};
+
+    if ($compensation_price) {
+        die "'compensation_pay_with' is required" unless $compensation_pay_with;
+    }
+
+    my $calc           = OpenCloset::Calculator::LateFee->new;
+    my $extension_days = $calc->extension_days( $order, $return_date->datetime );
+    my $overdue_days   = $calc->overdue_days( $order, $return_date->datetime );
+
+    if ( $extension_days or $overdue_days ) {
+        $is_late = 1;
+        die "'late_fee_pay_with' is required" unless $late_fee_pay_with;
+    }
+
     my $schema = $self->{schema};
     my $guard  = $schema->txn_scope_guard;
-    my $calc   = OpenCloset::Calculator::LateFee->new;
 
     my ( $success, $error ) = try {
-        my $is_late = 0;
-        my $late_fee_pay_with;
         if ( my $extension_days = $calc->extension_days( $order, $return_date->datetime ) ) {
-            my $pay_with = $extra->{late_fee_pay_with};
-            die "late_fee_pay_with is required" unless $pay_with;
-
             my $price = $calc->rental_price($order);
             my $rate  = $OpenCloset::Calculator::LateFee::EXTENSION_RATE;
 
@@ -580,18 +628,12 @@ sub rental2returned {
                     final_price => $price * $rate * $extension_days,
                     stage       => 1,
                     desc        => sprintf( '%s원 x %d%% x %d일', $self->commify($price), $rate * 100, $extension_days ),
-                    pay_with    => $pay_with,
+                    pay_with    => $late_fee_pay_with,
                 }
             ) or die "Failed to create a new order_detail for 연장료";
-
-            $is_late++;
-            $late_fee_pay_with = $pay_with;
         }
 
         if ( my $overdue_days = $calc->overdue_days( $order, $return_date->datetime ) ) {
-            my $pay_with = $extra->{late_fee_pay_with};
-            die "late_fee_pay_with is required" unless $pay_with;
-
             my $price = $calc->rental_price($order);
             my $rate  = $OpenCloset::Calculator::LateFee::OVERDUE_RATE;
 
@@ -603,27 +645,25 @@ sub rental2returned {
                     final_price => $price * $rate * $overdue_days,
                     stage       => 1,
                     desc        => sprintf( '%s원 x %d%% x %d일', $self->commify($price), $rate * 100, $overdue_days ),
-                    pay_with    => $pay_with,
+                    pay_with    => $late_fee_pay_with,
                 }
             ) or die "Failed to create a new order_detail for 연체료";
-
-            $is_late++;
-            $late_fee_pay_with = $pay_with;
         }
 
-        if ( $is_late and my $discount = $extra->{late_fee_discount} ) {
+        if ( $is_late and $late_fee_discount ) {
+            $late_fee_discount *= -1 if $late_fee_discount > 0;
             $order->create_related(
                 'order_details',
                 {
                     name        => '연체/연장료 에누리',
-                    price       => $discount,
-                    final_price => $discount,
+                    price       => $late_fee_discount,
+                    final_price => $late_fee_discount,
                     stage       => 1,
                 }
             ) or die "Failed to create a new order_detail for 연체/연장료 에누리";
         }
 
-        if ( my $compensation_price = $extra->{compensation_price} ) {
+        if ($compensation_price) {
             $order->create_related(
                 'order_details',
                 {
@@ -631,16 +671,18 @@ sub rental2returned {
                     price       => $compensation_price,
                     final_price => $compensation_price,
                     stage       => 2,
+                    pay_with    => $compensation_pay_with,
                 }
             ) or die "Failed to create a new order_detail for 배상비";
 
-            if ( my $discount = $extra->{compensation_discount} ) {
+            if ($compensation_discount) {
+                $compensation_discount *= -1 if $compensation_discount > 0;
                 $order->create_related(
                     'order_details',
                     {
                         name        => '배상비 에누리',
-                        price       => $discount,
-                        final_price => $discount,
+                        price       => $compensation_discount,
+                        final_price => $compensation_discount,
                         stage       => 2,
                     }
                 ) or die "Failed to create a new order_detail for 배상비 에누리";
@@ -649,9 +691,10 @@ sub rental2returned {
 
         $order->update(
             {
-                status_id         => $RETURNED,
-                return_date       => $return_date->datetime,
-                late_fee_pay_with => $late_fee_pay_with,
+                status_id             => $RETURNED,
+                return_date           => $return_date->datetime,
+                late_fee_pay_with     => $late_fee_pay_with,
+                compensation_pay_with => $compensation_pay_with,
             }
         );
         $order->clothes->update_all( { status_id => $RETURNED } );
