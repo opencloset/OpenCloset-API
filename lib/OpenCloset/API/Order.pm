@@ -291,7 +291,7 @@ sub boxed2payment {
     return 1;
 }
 
-=head2 payment2rental( $order, $pay_with, $additional_days? )
+=head2 payment2rental( $order, %extra )
 
     my $success = $api->payment2rental($order, '현금', 4);
 
@@ -305,11 +305,11 @@ C<$order> - L<OpenCloset::Schema::Result::Order> obj
 
 =item *
 
-C<$pay_with> - 결제방법
+C<pay_with> - 결제방법
 
 =item *
 
-연장일수 C<$additional_days> - default is C<0>
+C<additional_days> - 연장일수 default is C<0>
 
 =back
 
@@ -364,11 +364,12 @@ monitor 에 이벤트 알림
 our $DEFAULT_RENTAL_DAYS = 3; # 3박4일
 
 sub payment2rental {
-    my ( $self, $order, $pay_with, $additional_days ) = @_;
+    my ( $self, $order, %extra ) = @_;
     return unless $order;
 
-    unless ($pay_with) {
-        warn "pay_with is required";
+    $extra{pay_with} ||= $order->price_pay_with;
+    unless ( $extra{pay_with} ) {
+        warn "price_pay_with is required";
         return;
     }
 
@@ -380,16 +381,13 @@ sub payment2rental {
         my $rental_date = DateTime->today( time_zone => $tz->name );
         my %update      = (
             status_id      => $RENTAL,
-            price_pay_with => $pay_with,
+            price_pay_with => $extra{pay_with},
             rental_date    => $rental_date->datetime,
         );
 
+        my $additional_days = $extra{additional_days};
         if ( $additional_days and $additional_days > 0 ) {
-            $update{additional_day} = $additional_days;
-            my $user_target_date = $rental_date->clone->truncate( to => 'day' );
-            $user_target_date->add( days => $DEFAULT_RENTAL_DAYS + $additional_days );
-            $user_target_date->set( hour => 23, minute => 59, second => 59 );
-            $update{user_target_date} = $user_target_date->datetime;
+            die "Failed to update addtional_days" unless $self->additional_day($additional_days);
         }
 
         ## update order status_id rental_date, additional_day and user_target_date
@@ -402,7 +400,7 @@ sub payment2rental {
         $order->order_details( { clothes_code => { '!=' => undef } } )->update_all( { status_id => $RENTAL } );
 
         if ( my $coupon = $order->coupon ) {
-            if ( $pay_with =~ m/쿠폰/ ) {
+            if ( $extra{pay_with} =~ m/쿠폰/ ) {
                 $coupon->update( { status => 'used' } );
             }
         }
