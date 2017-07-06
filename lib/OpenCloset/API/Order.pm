@@ -305,11 +305,11 @@ C<$order> - L<OpenCloset::Schema::Result::Order> obj
 
 =item *
 
-C<pay_with> - 결제방법
+C<price_pay_with> - 결제방법
 
 =item *
 
-C<additional_days> - 연장일수 default is C<0>
+C<additional_day> - 연장일수 default is C<0>
 
 =back
 
@@ -367,11 +367,13 @@ sub payment2rental {
     my ( $self, $order, %extra ) = @_;
     return unless $order;
 
-    $extra{pay_with} ||= $order->price_pay_with;
-    unless ( $extra{pay_with} ) {
+    my $price_pay_with = $extra{price_pay_with} ||= $order->price_pay_with;
+    unless ($price_pay_with) {
         warn "price_pay_with is required";
         return;
     }
+
+    $self->additional_day( $order, $extra{additional_day} ) if defined $extra{additional_day};
 
     my $schema = $self->{schema};
     my $guard  = $schema->txn_scope_guard;
@@ -381,14 +383,9 @@ sub payment2rental {
         my $rental_date = DateTime->today( time_zone => $tz->name );
         my %update      = (
             status_id      => $RENTAL,
-            price_pay_with => $extra{pay_with},
+            price_pay_with => $price_pay_with,
             rental_date    => $rental_date->datetime,
         );
-
-        my $additional_days = $extra{additional_days};
-        if ( $additional_days and $additional_days > 0 ) {
-            die "Failed to update addtional_days" unless $self->additional_day($additional_days);
-        }
 
         ## update order status_id rental_date, additional_day and user_target_date
         $order->update( \%update );
@@ -400,7 +397,7 @@ sub payment2rental {
         $order->order_details( { clothes_code => { '!=' => undef } } )->update_all( { status_id => $RENTAL } );
 
         if ( my $coupon = $order->coupon ) {
-            if ( $extra{pay_with} =~ m/쿠폰/ ) {
+            if ( $extra{price_pay_with} =~ m/쿠폰/ ) {
                 $coupon->update( { status => 'used' } );
             }
         }
@@ -745,12 +742,7 @@ $days - 연장일
 sub additional_day {
     my ( $self, $order, $days ) = @_;
     return unless $order;
-    return unless $days;
-
-    if ( $order->additional_day == $days ) {
-        warn "additional_day is already $days";
-        return;
-    }
+    return unless defined $days;
 
     if ( $order->status_id != $PAYMENT ) {
         warn "status_id should be 'PAYMENT'";

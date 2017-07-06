@@ -176,7 +176,7 @@ subtest '결제대기 -> 대여중' => sub {
     my @codes = qw/0J001 0P001 0S003 0A001/;
     $api->box2boxed( $order, \@codes );
     $api->boxed2payment($order);
-    my $success = $api->payment2rental( $order, '현금' );
+    my $success = $api->payment2rental( $order, price_pay_with => '현금' );
     ok( $success, 'payment2rental' );
     is( $order->status_id, $RENTAL, 'status_id' );
 
@@ -186,7 +186,7 @@ subtest '결제대기 -> 대여중' => sub {
     $order = $schema->resultset('Order')->create($order_param);
     $api->box2boxed( $order, \@codes );
     $api->boxed2payment($order);
-    $success = $api->payment2rental( $order, '카드', 2 );
+    $success = $api->payment2rental( $order, price_pay_with => '카드', additional_day => 2 );
 
     my $today = DateTime->today( time_zone => 'Asia/Seoul' );
     my $user_target_date = $today->add( days => 3 + 2 )->set( hour => 23, minute => 59, second => 59 );
@@ -204,7 +204,7 @@ subtest '대여중 -> 반납' => sub {
     my @codes = qw/0J001 0P001 0S003 0A001/;
     $api->box2boxed( $order, \@codes );
     $api->boxed2payment($order);
-    $api->payment2rental( $order, '현금' );
+    $api->payment2rental( $order, price_pay_with => '현금' );
     my $success = $api->rental2returned($order);
     ok( $success, 'rental2returned' );
     is( $order->status_id, $RETURNED, 'status_id' );
@@ -226,7 +226,7 @@ subtest '대여중 -> 반납' => sub {
     $order = $schema->resultset('Order')->create($order_param);
     $api->box2boxed( $order, \@codes );
     $api->boxed2payment($order);
-    $api->payment2rental( $order, '현금' );
+    $api->payment2rental( $order, price_pay_with => '현금' );
 
     my $target_date      = $order->target_date;
     my $user_target_date = $target_date->clone->add( days => 2 );
@@ -264,7 +264,8 @@ subtest 'additional_day' => sub {
     $api->box2boxed( $order, \@codes );
     $api->boxed2payment($order);
 
-    my $user_target_date = $order->user_target_date->clone;
+    ## 반납희망일은 반납예정일 + additional_day
+    my $user_target_date = $order->target_date->clone;
 
     my $success = $api->additional_day( $order, 1 );
 
