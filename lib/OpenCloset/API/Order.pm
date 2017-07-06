@@ -747,6 +747,11 @@ sub additional_day {
     return unless $order;
     return unless $days;
 
+    if ( $order->additional_day == $days ) {
+        warn "additional_day is already $days";
+        return;
+    }
+
     if ( $order->status_id != $PAYMENT ) {
         warn "status_id should be 'PAYMENT'";
         return;
@@ -757,7 +762,7 @@ sub additional_day {
         return;
     }
 
-    my $user_target_date = $order->user_target_date;
+    my $user_target_date = $order->target_date->clone;
     $user_target_date->add( days => $days );
 
     my $schema = $self->{schema};
