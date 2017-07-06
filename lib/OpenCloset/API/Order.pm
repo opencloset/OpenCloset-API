@@ -591,9 +591,10 @@ sub rental2returned {
     }
 
     my $is_late;
-    my $late_fee_pay_with     = $extra{late_fee_pay_with};
+    my $late_fee_pay_with     = $extra{late_fee_pay_with}     || $order->late_fee_pay_with;
+    my $compensation_pay_with = $extra{compensation_pay_with} || $order->compensation_pay_with;
+
     my $late_fee_discount     = $extra{late_fee_discount};
-    my $compensation_pay_with = $extra{compensation_pay_with};
     my $compensation_price    = $extra{compensation_price};
     my $compensation_discount = $extra{compensation_discount};
 
