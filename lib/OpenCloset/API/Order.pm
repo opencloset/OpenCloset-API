@@ -617,9 +617,19 @@ sub rental2returned {
     my $guard  = $schema->txn_scope_guard;
 
     my ( $success, $error ) = try {
+        my $price    = $calc->price($order);
+        my $discount = $calc->discount_price($order);
+        my $coupon   = $order->coupon;
+        if ( $coupon and $coupon->type eq 'suit' ) {
+            ## suit type 쿠폰일때는 정상금액을 기준으로 계산
+        }
+        else {
+            ## 이외에는 대여금액으로 계산: 대여금액 = 정상금액 - 할인금액
+            $price += $discount;
+        }
+
         if ( my $extension_days = $calc->extension_days( $order, $return_date->datetime ) ) {
-            my $price = $calc->rental_price($order);
-            my $rate  = $OpenCloset::Calculator::LateFee::EXTENSION_RATE;
+            my $rate = $OpenCloset::Calculator::LateFee::EXTENSION_RATE;
 
             $order->create_related(
                 'order_details',
@@ -635,8 +645,7 @@ sub rental2returned {
         }
 
         if ( my $overdue_days = $calc->overdue_days( $order, $return_date->datetime ) ) {
-            my $price = $calc->rental_price($order);
-            my $rate  = $OpenCloset::Calculator::LateFee::OVERDUE_RATE;
+            my $rate = $OpenCloset::Calculator::LateFee::OVERDUE_RATE;
 
             $order->create_related(
                 'order_details',
