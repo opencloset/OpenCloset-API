@@ -293,7 +293,7 @@ sub boxed2payment {
 
 =head2 payment2rental( $order, %extra )
 
-    my $success = $api->payment2rental($order, '현금', 4);
+    my $success = $api->payment2rental($order, price_pay_with => '현금', additional_day => 4);
 
 =head3 Args
 
