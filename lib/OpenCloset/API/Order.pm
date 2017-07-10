@@ -595,8 +595,9 @@ sub rental2returned {
     my $compensation_price    = $extra{compensation_price};
     my $compensation_discount = $extra{compensation_discount};
 
-    if ($compensation_price) {
-        die "'compensation_pay_with' is required" unless $compensation_pay_with;
+    if ( $compensation_price and !$compensation_pay_with ) {
+        warn "'compensation_pay_with' is required";
+        return;
     }
 
     my $calc           = OpenCloset::Calculator::LateFee->new;
@@ -605,7 +606,11 @@ sub rental2returned {
 
     if ( $extension_days or $overdue_days ) {
         $is_late = 1;
-        die "'late_fee_pay_with' is required" unless $late_fee_pay_with;
+
+        unless ($late_fee_pay_with) {
+            warn "'late_fee_pay_with' is required";
+            return;
+        }
     }
 
     my $schema = $self->{schema};
