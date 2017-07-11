@@ -192,7 +192,7 @@ subtest '결제대기 -> 대여중' => sub {
     $success = $api->payment2rental( $order, price_pay_with => '카드', additional_day => 2 );
 
     my $today = DateTime->today( time_zone => 'Asia/Seoul' );
-    my $user_target_date = $today->add( days => 3 + 2 )->set( hour => 23, minute => 59, second => 59 );
+    my $user_target_date = $today->clone->add( days => 3 + 2 )->set( hour => 23, minute => 59, second => 59 );
     is( $order->additional_day, 2, 'additional_day' );
     is( $order->user_target_date->datetime, $user_target_date->datetime, 'user_target_date' );
 
