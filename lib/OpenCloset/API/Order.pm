@@ -273,6 +273,10 @@ sub box2boxed {
 
 =item *
 
+C<target_date> 와 C<user_target_date> 를 3박 4일로 설정
+
+=item *
+
 opencloset/monitor 에 event 전달
 
 =back
@@ -283,7 +287,17 @@ sub boxed2payment {
     my ( $self, $order ) = @_;
     return unless $order;
 
-    $order->update( { status_id => $PAYMENT } );
+    my $tz               = $order->create_date->time_zone;
+    my $today            = DateTime->today( time_zone => $tz->name );
+    my $target_date      = $today->clone->add( days => 3 )->set( hour => 23, minute => 59, second => 59 );
+    my $user_target_date = $target_date->clone;
+    $order->update(
+        {
+            status_id        => $PAYMENT,
+            target_date      => $target_date->datetime,
+            user_target_date => $user_target_date->datetime
+        }
+    );
 
     return 1 unless $self->{notify};
 
