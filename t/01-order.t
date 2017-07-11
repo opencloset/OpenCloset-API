@@ -54,7 +54,10 @@ subtest '포장 -> 포장완료' => sub {
 
     #---------------------------------
 
-    my @codes = qw/0J001 0P001 0S003 0A001/;
+    my @codes = qw/0A001 0S003 0P001 0J001/;
+    @codes = $api->_sort_codes(@codes);
+    is_deeply( \@codes, [qw/0J001 0P001 0S003 0A001/], '_sort_codes' );
+
     my $clothes = $schema->resultset('Clothes')->search( { code => { -in => \@codes } } );
     $clothes->update_all( { status_id => $RENTABLE } );
 
