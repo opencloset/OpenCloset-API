@@ -727,8 +727,15 @@ sub rental2returned {
     $self->notify( $order, $RENTAL, $RETURNED ) if $self->{notify};
     return 1 unless $self->{sms};
 
-    ## TODO
-    ## "[열린옷장] #{username}님의 의류가 정상적으로 반납되었습니다. 감사합니다." sms
+    my $user      = $order->user;
+    my $user_info = $user->user_info;
+    my $sms       = OpenCloset::API::SMS->new( schema => $schema );
+    my $mt        = Mojo::Template->new;
+    my $tpl       = data_section __PACKAGE__, 'returned-1.txt';
+    my $msg       = $mt->render( $tpl, $order, $user );
+    chomp $msg;
+
+    $sms->send( to => $user_info->phone, msg => $msg );
 
     return 1;
 }
@@ -880,3 +887,7 @@ __DATA__
 <%= $user->name %>님이 대여하신 다른 의류의 기증자 이야기를 읽으시려면 URL을 클릭해 주세요.
 
 https://story.theopencloset.net/letters/o/<%= $order->id %>/d
+
+@@ returned-1.txt
+% my ($order, $user) = @_;
+[열린옷장] <%= $user->name %>님의 의류가 정상적으로 반납되었습니다. 감사합니다.
