@@ -130,6 +130,7 @@ sub box2boxed {
     return unless @{ $codes ||= [] };
 
     my @codes = map { sprintf( '%05s', $_ ) } @$codes;
+    @codes = $self->_sort_codes(@codes);
 
     my $schema = $self->{schema};
     my $guard  = $schema->txn_scope_guard;
@@ -863,6 +864,40 @@ sub commify {
     local $_ = shift;
     1 while s/((?:\A|[^.0-9])[-+]?\d+)(\d{3})/$1,$2/s;
     return $_;
+}
+
+=head2 _sort_codes( @codes )
+
+sort clothes codes by score.
+
+    my @codes = qw/0S003 0J001 0P001 0A001/;
+    @codes = $self->_sort_codes(@codes);    # ("0J001", "0P001", "0S003", "0A001")
+
+=cut
+
+sub _sort_codes {
+    my ( $self, @codes ) = @_;
+
+    my %SCORE = (
+        J => 10,  # JACKET
+        P => 20,  # PANTS
+        K => 30,  # SKIRT
+        O => 40,  # ONEPIECE
+        C => 50,  # COAT
+        W => 60,  # WAISTCOAT
+        S => 70,  # SHIRT
+        B => 80,  # BLOUSE
+        T => 90,  # TIE
+        E => 100, # BELT
+        A => 110, # SHOES
+        M => 120, # MISC
+    );
+
+    return sort {
+        my $i = $a =~ m/^0/ ? 1 : 0;
+        my $j = $b =~ m/^0/ ? 1 : 0;
+        $SCORE{ substr( $a, $i, 1 ) } <=> $SCORE{ substr( $b, $j, 1 ) }
+    } @codes;
 }
 
 =head1 AUTHOR
