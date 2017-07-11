@@ -789,8 +789,12 @@ sub additional_day {
         return;
     }
 
-    my $user_target_date = $order->target_date->clone;
-    $user_target_date->add( days => $days );
+    ## 오늘날짜를 기준으로 바뀌어야 한다
+    ## 반납예정일 반납희망일 모두
+    my $tz               = $order->create_date->time_zone;
+    my $today            = DateTime->today( time_zone => $tz->name );
+    my $target_date      = $today->clone->add( days => 3 )->set( hour => 23, minute => 59, second => 59 );
+    my $user_target_date = $target_date->clone->add( days => 3 + $days );
 
     my $schema = $self->{schema};
     my $guard  = $schema->txn_scope_guard;
@@ -798,6 +802,7 @@ sub additional_day {
         $order->update(
             {
                 additional_day   => $days,
+                target_date      => $target_date->datetime,
                 user_target_date => $user_target_date->datetime,
             }
         );
