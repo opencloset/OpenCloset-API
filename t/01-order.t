@@ -280,4 +280,24 @@ subtest 'additional_day' => sub {
     is( $order->user_target_date->datetime, $user_target_date->add( days => 1 )->datetime, 'user_target_date' );
 };
 
+subtest 'rental2partial_returned' => sub {
+    my $order_param = order_param($schema);
+    $order_param->{user_id} = 2;
+
+    my $order = $schema->resultset('Order')->create($order_param);
+    my @codes = qw/0J001 0P001 0S003 0A001/;
+    $api->box2boxed( $order, \@codes );
+    $api->boxed2payment($order);
+    $api->payment2rental( $order, price_pay_with => '현금' );
+    my $success = $api->rental2partial_returned( $order, [qw/0J001 0P001 0S003/] );
+    ok( $success, 'rental2partial_returned' );
+    is( $order->status_id, $RETURNED, 'order.status_id' );
+    my $child = $order->orders->next;
+    ok( $child, 'child order' );
+    is( $child->status_id, $PAYMENT, 'child.status_id' );
+    my $detail = $child->order_details->next;
+    ok( $detail, 'child.order_details' );
+    is( $detail->clothes_code, '0A001', 'child.clothes_code' );
+};
+
 done_testing();

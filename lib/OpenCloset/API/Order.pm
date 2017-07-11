@@ -26,9 +26,11 @@ OpenCloset::API::Order - 주문서의 상태변경 API
 =head1 SYNOPSIS
 
     my $api = OpenCloset::API::Order->new(schema => $schema);
-    $api->box2boxed($order, ['J001', 'P001']);    # 포장 -> 포장완료
-    $api->boxed2payment($order);                  # 포장완료 -> 결제대기
-    $api->payment2rental($order, '현금');          # 결제대기 -> 대여중
+    $api->box2boxed($order, ['J001', 'P001']);               # 포장 -> 포장완료
+    $api->boxed2payment($order);                             # 포장완료 -> 결제대기
+    $api->payment2rental($order, '현금');                     # 결제대기 -> 대여중
+    $api->rental2returned($order);                           # 대여중 -> 반납
+    $api->rental2partial_returned($order, ['J001', 'P001']); # 대여중 -> 부분반납
 
 =cut
 
@@ -752,6 +754,77 @@ sub rental2returned {
 
     $sms->send( to => $user_info->phone, msg => $msg );
 
+    return 1;
+}
+
+=head2 rental2partial_returned( $order, \@codes )
+
+    my $success = $api->rental2partial_returned($order, ['J001', 'P001']);
+
+=cut
+
+sub rental2partial_returned {
+    my ( $self, $order, $codes, %extra ) = @_;
+    return unless $order;
+    return unless @{ $codes ||= [] };
+
+    my %seen;
+    my @codes = map { sprintf( '%05s', $_ ) } @$codes;
+    my $clothes = $order->clothes;
+
+    while ( my $c = $clothes->next ) {
+        $seen{ $c->code }++;
+    }
+
+    map { delete $seen{$_} } @codes;
+    @codes = keys %seen;
+    unless (@codes) {
+        warn "All clothes are returned";
+        return;
+    }
+
+    my $schema = $self->{schema};
+    my $guard  = $schema->txn_scope_guard;
+    my $notify = delete $self->{notify};
+    my $sms    = delete $self->{sms};
+
+    my ( $success, $error ) = try {
+        my %columns = $order->get_columns;
+
+        my $parent_id = delete $columns{id};
+        map { delete $columns{$_} } qw/additional_day return_date return_method late_fee_pay_with price_pay_with/;
+
+        $columns{status_id} = $BOX;
+        $columns{coupon_id} = undef;
+        $columns{parent_id} = $parent_id;
+
+        my $child = $schema->resultset('Order')->create( \%columns );
+        die "Failed to create a new order" unless $child;
+
+        $self->box2boxed( $child, \@codes );
+        $self->boxed2payment($child);
+        my $details = $child->order_details( { stage => 0, clothes_code => { '!=' => undef } } );
+        $details->update_all( { price => 0, final_price => 0, desc => undef } );
+        $self->rental2returned( $order, %extra );
+        $guard->commit;
+        return 1;
+    }
+    catch {
+        my $err = $_;
+        return ( undef, $err );
+    }
+    finally {
+        $self->{notify} = $notify;
+        $self->{sms}    = $sms;
+    };
+
+    unless ($success) {
+        my $order_id = $order->id;
+        warn "Failed to execute rental2returned($order_id): $error";
+        return;
+    }
+
+    $self->notify( $order, $RENTAL, $RETURNED ) if $self->{notify};
     return 1;
 }
 
