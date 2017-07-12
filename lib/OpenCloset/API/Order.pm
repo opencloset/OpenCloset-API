@@ -13,7 +13,7 @@ use Try::Tiny;
 use OpenCloset::API::SMS;
 use OpenCloset::Calculator::LateFee;
 use OpenCloset::Constants::Category;
-use OpenCloset::Constants::Status qw/$RENTAL $BOX $BOXED $PAYMENT $RETURNED $CANCEL_BOX/;
+use OpenCloset::Constants::Status qw/$RENTAL $BOX $BOXED $PAYMENT $RETURNED $CANCEL_BOX $PAYBACK/;
 
 use OpenCloset::DB::Plugin::Order::Sale;
 
@@ -963,6 +963,80 @@ sub payment2box {
     }
 
     $self->notify( $order, $PAYMENT, $BOX ) if $self->{notify};
+    return 1;
+}
+
+=head2 rental2payback( $order, $charge? )
+
+    my $success = $api->rental2payback($order, 5_000)
+
+환불
+
+=over
+
+=item *
+
+C<order_detail> 항목을 추가
+
+    name:        환불
+    price:       대여비 * -1
+    final_price: 대여비 * -1
+    stage:       3
+    desc:        환불 수수료: $charge원
+
+=item *
+
+주문서 의류의 상태를 C<$PAYBACK> 으로 변경
+
+=item *
+
+주문서의 상태를 C<$PAYBACK> 으로 변경
+
+=back
+
+=cut
+
+sub rental2payback {
+    my ( $self, $order, $charge ) = @_;
+    return unless $order;
+
+    $charge ||= 0;
+
+    my $calc         = OpenCloset::Calculator::LateFee->new;
+    my $rental_price = $calc->rental_price($order);
+
+    my $schema = $self->{schema};
+    my $guard  = $schema->txn_scope_guard;
+
+    my ( $success, $error ) = try {
+        $order->create_related(
+            'order_details',
+            {
+                name        => '환불',
+                price       => ( $rental_price - $charge ) * -1,
+                final_price => ( $rental_price - $charge ) * -1,
+                stage       => 3,
+                desc        => sprintf( '환불 수수료: %s원', $self->commify($charge) ),
+            }
+        ) or die "Failed to create a new order_detail for 환불";
+
+        $order->clothes->update_all( { status_id => $PAYBACK } );
+        $order->update( { status_id => $PAYBACK } );
+        $guard->commit;
+        return 1;
+    }
+    catch {
+        my $err = $_;
+        return ( undef, $err );
+    };
+
+    unless ($success) {
+        my $order_id = $order->id;
+        warn "Failed to execute rental2payback($order_id): $error";
+        return;
+    }
+
+    $self->notify( $order, $RENTAL, $PAYBACK ) if $self->{notify};
     return 1;
 }
 
