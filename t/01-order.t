@@ -7,7 +7,7 @@ use DateTime;
 use open ':std', ':encoding(utf8)';
 use Test::More;
 
-use OpenCloset::Constants::Status qw/$RENTABLE $RENTAL $BOXED $PAYMENT $RETURNED/;
+use OpenCloset::Constants::Status qw/$RENTABLE $RENTAL $BOXED $PAYMENT $RETURNED $CANCEL_BOX/;
 use OpenCloset::Schema;
 use OpenCloset::Calculator::LateFee;
 
@@ -298,6 +298,28 @@ subtest 'rental2partial_returned' => sub {
     my $detail = $child->order_details->next;
     ok( $detail, 'child.order_details' );
     is( $detail->clothes_code, '0A001', 'child.clothes_code' );
+};
+
+subtest 'payment2box' => sub {
+    my $order_param = order_param($schema);
+    $order_param->{user_id} = 2;
+
+    my $order = $schema->resultset('Order')->create($order_param);
+    my @codes = qw/0J001 0P001 0S003 0A001/;
+    $api->box2boxed( $order, \@codes );
+    $api->boxed2payment($order);
+
+    my $success = $api->payment2box($order);
+    ok( $success, 'payment2box' );
+    my $clothes = $schema->resultset('Clothes')->find( { code => '0J001' } );
+    is( $clothes->status_id, $CANCEL_BOX, 'clothes.status_id' );
+    my $count = $order->order_details->count;
+    is( $count,                   0,     'deleted order_details' );
+    is( $order->rental_date,      undef, 'rental_date' );
+    is( $order->target_date,      undef, 'target_date' );
+    is( $order->user_target_date, undef, 'user_target_date' );
+    is( $order->return_date,      undef, 'return_date' );
+    is( $order->price_pay_with,   undef, 'price_pay_with' );
 };
 
 done_testing();

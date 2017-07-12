@@ -13,7 +13,7 @@ use Try::Tiny;
 use OpenCloset::API::SMS;
 use OpenCloset::Calculator::LateFee;
 use OpenCloset::Constants::Category;
-use OpenCloset::Constants::Status qw/$RENTAL $BOX $BOXED $PAYMENT $RETURNED/;
+use OpenCloset::Constants::Status qw/$RENTAL $BOX $BOXED $PAYMENT $RETURNED $CANCEL_BOX/;
 
 use OpenCloset::DB::Plugin::Order::Sale;
 
@@ -761,6 +761,35 @@ sub rental2returned {
 
     my $success = $api->rental2partial_returned($order, ['J001', 'P001']);
 
+=over
+
+=item *
+
+현재 주문서의 내용을 복사해서 새로운 주문서를 만듦
+이때에 반납되지 않은 의류들만 포함
+
+=item *
+
+정상적인 절차를 통해서 새로 만든 주문서의 상태를
+
+    $BOX -> $BOXED -> $PAYMENT
+
+로 변경
+
+=item *
+
+새로 만든 주문서 C<order_detail> 의 C<price>, C<final_price>, C<desc> 를 reset
+
+=item *
+
+현재 주문서에 대해 C<rental2returned>(대여중 -> 반납) 를 호출해서 반납으로 변경
+
+=item *
+
+opencloset/monitor 에 event 를 posting
+
+=back
+
 =cut
 
 sub rental2partial_returned {
@@ -820,11 +849,120 @@ sub rental2partial_returned {
 
     unless ($success) {
         my $order_id = $order->id;
-        warn "Failed to execute rental2returned($order_id): $error";
+        warn "Failed to execute rental2partial_returned($order_id): $error";
         return;
     }
 
     $self->notify( $order, $RENTAL, $RETURNED ) if $self->{notify};
+    return 1;
+}
+
+=head2 payment2box
+
+    my $success = $api->payment2box($order);    # 새로주문
+
+=over
+
+=item *
+
+포장된 의류의 상태를 C<$CANCEL_BOX> 로 변경
+
+=item *
+
+상세항목을 모두 제거
+
+=item *
+
+상태를 C<$BOX> 로 변경
+
+=item *
+
+결제 및 반납과 관련된 컬럼을 reset
+
+=over
+
+=item *
+
+staff_id
+
+=item *
+
+rental_date
+
+=item *
+
+target_date
+
+=item *
+
+user_target_date
+
+=item *
+
+return_date
+
+=item *
+
+return_method
+
+=item *
+
+price_pay_with
+
+=item *
+
+late_fee_pay_with
+
+=item *
+
+bestfit
+
+=back
+
+=back
+
+=cut
+
+sub payment2box {
+    my ( $self, $order ) = @_;
+    return unless $order;
+
+    my $schema = $self->{schema};
+    my $guard  = $schema->txn_scope_guard;
+
+    my ( $success, $error ) = try {
+        $order->clothes->update_all( { status_id => $CANCEL_BOX } );
+        $order->order_details->delete_all;
+        $order->update(
+            {
+                status_id         => $BOX,
+                staff_id          => undef,
+                rental_date       => undef,
+                target_date       => undef,
+                user_target_date  => undef,
+                return_date       => undef,
+                return_method     => undef,
+                price_pay_with    => undef,
+                late_fee_pay_with => undef,
+                bestfit           => 0,
+            }
+        );
+
+        $guard->commit;
+        return 1;
+    }
+    catch {
+        my $err = $_;
+        return ( undef, $err );
+    };
+
+    unless ($success) {
+        my $order_id = $order->id;
+        warn "Failed to execute payment2box($order_id): $error";
+        return;
+    }
+
+    $self->notify( $order, $PAYMENT, $BOX ) if $self->{notify};
     return 1;
 }
 
