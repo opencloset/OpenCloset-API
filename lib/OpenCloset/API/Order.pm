@@ -1079,8 +1079,8 @@ sub additional_day {
     ## 반납예정일 반납희망일 모두
     my $tz               = $order->create_date->time_zone;
     my $today            = DateTime->today( time_zone => $tz->name );
-    my $target_date      = $today->clone->add( days => 3 )->set( hour => 23, minute => 59, second => 59 );
-    my $user_target_date = $today->clone->add( days => 3 + $days )->set( hour => 23, minute => 59, second => 59 );
+    my $target_date      = $today->clone->add( days => 3 + $days )->set( hour => 23, minute => 59, second => 59 );
+    my $user_target_date = $target_date->clone;
 
     my $schema = $self->{schema};
     my $guard  = $schema->txn_scope_guard;
