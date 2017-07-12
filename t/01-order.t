@@ -7,7 +7,7 @@ use DateTime;
 use open ':std', ':encoding(utf8)';
 use Test::More;
 
-use OpenCloset::Constants::Status qw/$RENTABLE $RENTAL $BOXED $PAYMENT $RETURNED $CANCEL_BOX/;
+use OpenCloset::Constants::Status qw/$RENTABLE $RENTAL $BOXED $PAYMENT $RETURNED $CANCEL_BOX $PAYBACK/;
 use OpenCloset::Schema;
 use OpenCloset::Calculator::LateFee;
 
@@ -320,6 +320,29 @@ subtest 'payment2box' => sub {
     is( $order->user_target_date, undef, 'user_target_date' );
     is( $order->return_date,      undef, 'return_date' );
     is( $order->price_pay_with,   undef, 'price_pay_with' );
+};
+
+subtest 'rental2payback' => sub {
+    my $order_param = order_param($schema);
+    $order_param->{user_id} = 2;
+
+    my $order = $schema->resultset('Order')->create($order_param);
+    my @codes = qw/0J001 0P001 0S003 0A001/;
+    $api->box2boxed( $order, \@codes );
+    $api->boxed2payment($order);
+    $api->payment2rental( $order, price_pay_with => '현금' );
+    my $success = $api->rental2payback($order);
+    ok( $success, 'rental2payback' );
+    my $detail = $order->order_details( { name => '환불' } )->next;
+    ok( $detail, 'added order_detail' );
+
+    my $calc         = OpenCloset::Calculator::LateFee->new;
+    my $rental_price = $calc->rental_price($order);
+    is( $detail->final_price, $rental_price * -1, 'final_price' );
+
+    is( $order->status_id, $PAYBACK, 'order.status_id' );
+    my $clothes = $order->clothes->next;
+    is( $clothes->status_id, $PAYBACK, 'clothes.status_id' );
 };
 
 done_testing();
