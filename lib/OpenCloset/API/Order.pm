@@ -832,6 +832,11 @@ sub rental2partial_returned {
 
         $self->box2boxed( $child, \@codes );
         $self->boxed2payment($child);
+
+        my $tz = $order->create_date->time_zone;
+        my $now = DateTime->now( time_zone => $tz->name );
+        $child->update( { target_date => $now->datetime, user_target_date => $now->datetime } );
+
         my $details = $child->order_details( { stage => 0, clothes_code => { '!=' => undef } } );
         $details->update_all( { price => 0, final_price => 0, desc => undef } );
         $self->rental2returned( $order, %extra );
