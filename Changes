@@ -1,0 +1,18 @@
+# Change Log
+
+The format is based on [Keep a Changelog](http://keepachangelog.com/).
+
+## [Unreleased]
+
+## [v0.0.1] - Thu, 13 Jul 2017 11:44:33 +0900
+
+### Added
+- 포장 -> 포장완료 (#1)
+- 포장완료 -> 결제대기 (#2)
+- 결제대기 -> 대여중 (#3)
+- 대여중 -> 반납 (#4)
+- 대여중 -> 부분반납 (#5)
+- 결제대기 -> 포장 [새로주문]
+- 대여중 -> 환불 (#6)
+- 대여기간의 변경
+- 대여상세 금액변경
