@@ -408,17 +408,12 @@ sub payment2rental {
             rental_date    => $rental_date->datetime,
         );
 
-        ## update order status_id rental_date, additional_day and user_target_date
         $order->update( \%update );
-
-        ## update clohtes.status_id to $RENTAL
         $order->clothes->update_all( { status_id => $RENTAL } );
-
-        ## update order_details.status_id to $RENTAL
         $order->order_details( { clothes_code => { '!=' => undef } } )->update_all( { status_id => $RENTAL } );
 
         if ( my $coupon = $order->coupon ) {
-            if ( $extra{price_pay_with} =~ m/쿠폰/ ) {
+            if ( $price_pay_with =~ m/쿠폰/ ) {
                 $coupon->update( { status => 'used' } );
             }
         }
