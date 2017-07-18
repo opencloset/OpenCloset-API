@@ -364,6 +364,10 @@ C<additional_day> - 연장일수 default is C<0>
 
 =item *
 
+쿠폰이 있다면 쿠폰의 상태를 C<used> 로 변경
+
+=item *
+
 대여자에게 주문내용 및 반납안내 SMS 전송
 
 =item *
@@ -865,6 +869,8 @@ sub rental2partial_returned {
 =head2 payment2box
 
     my $success = $api->payment2box($order);    # 새로주문
+
+새로주문
 
 =over
 
