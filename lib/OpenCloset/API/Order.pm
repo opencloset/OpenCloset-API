@@ -978,7 +978,9 @@ sub payment2box {
         return;
     }
 
-    $self->notify( $order, $PAYMENT, $BOX ) if $self->{notify};
+    return 1 unless $self->{notify};
+
+    $self->notify( $order, $PAYMENT, $BOX );
     return 1;
 }
 
@@ -1038,6 +1040,13 @@ sub rental2payback {
 
         $order->clothes->update_all( { status_id => $PAYBACK } );
         $order->update( { status_id => $PAYBACK } );
+
+        ## 환불하면 쿠폰을 사용가능하도록 변경한다
+        ## https://github.com/opencloset/opencloset/issues/1193
+        if ( my $coupon = $order->coupon ) {
+            $coupon->update( { status => 'reserved' } );
+        }
+
         $guard->commit;
         return 1;
     }
@@ -1052,7 +1061,9 @@ sub rental2payback {
         return;
     }
 
-    $self->notify( $order, $RENTAL, $PAYBACK ) if $self->{notify};
+    return 1 unless $self->{notify};
+
+    $self->notify( $order, $RENTAL, $PAYBACK );
     return 1;
 }
 

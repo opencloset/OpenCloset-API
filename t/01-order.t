@@ -343,6 +343,21 @@ subtest 'rental2payback' => sub {
     is( $order->status_id, $PAYBACK, 'order.status_id' );
     my $clothes = $order->clothes->next;
     is( $clothes->status_id, $PAYBACK, 'clothes.status_id' );
+
+    my $coupon_param = coupon_param( $schema, 'default' );
+    my $coupon = $schema->resultset('Coupon')->create($coupon_param);
+
+    $order_param              = order_param($schema);
+    $order_param->{user_id}   = 2;
+    $order_param->{coupon_id} = $coupon->id;
+    $order                    = $schema->resultset('Order')->create($order_param);
+    $api->box2boxed( $order, \@codes );
+    $api->boxed2payment($order);
+    $api->payment2rental( $order, price_pay_with => '쿠폰' );
+    is( $order->coupon->status, 'used', 'coupon state is changed to used' );
+    $success = $api->rental2payback($order);
+    ok( $success, 'rental2payback with coupon' );
+    is( $order->coupon->status, 'reserved', 'coupon state is changed to reserved' );
 };
 
 done_testing();
