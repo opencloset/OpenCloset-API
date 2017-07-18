@@ -368,6 +368,10 @@ C<additional_day> - 연장일수 default is C<0>
 
 =item *
 
+사용자의 신체치수를 복사
+
+=item *
+
 대여자에게 주문내용 및 반납안내 SMS 전송
 
 =item *
@@ -399,16 +403,25 @@ sub payment2rental {
     my $schema = $self->{schema};
     my $guard  = $schema->txn_scope_guard;
 
-    my ( $success, $error ) = try {
-        my $tz          = $order->create_date->time_zone;
-        my $rental_date = DateTime->today( time_zone => $tz->name );
-        my %update      = (
-            status_id      => $RENTAL,
-            price_pay_with => $price_pay_with,
-            rental_date    => $rental_date->datetime,
-        );
+    my $user      = $order->user;
+    my $user_info = $user->user_info;
 
-        $order->update( \%update );
+    my ( $success, $error ) = try {
+        my $tz = $order->create_date->time_zone;
+        my $rental_date = DateTime->today( time_zone => $tz->name ); # 왜 now 가 아니라 today 인거지?
+
+        ## 사용자의 신체치수를 복사
+        my %size;
+        map { $size{$_} = $user_info->$_ } qw/height weight neck bust waist hip topbelly belly thigh arm leg knee foot pants skirt/;
+
+        $order->update(
+            {
+                status_id      => $RENTAL,
+                price_pay_with => $price_pay_with,
+                rental_date    => $rental_date->datetime,
+                %size,
+            }
+        );
         $order->clothes->update_all( { status_id => $RENTAL } );
         $order->order_details( { clothes_code => { '!=' => undef } } )->update_all( { status_id => $RENTAL } );
 
@@ -436,10 +449,7 @@ sub payment2rental {
 
     return 1 unless $self->{sms};
 
-    my $user      = $order->user;
-    my $user_info = $user->user_info;
-    my $sms       = OpenCloset::API::SMS->new( schema => $schema );
-
+    my $sms = OpenCloset::API::SMS->new( schema => $schema );
     my $mt  = Mojo::Template->new;
     my $tpl = data_section __PACKAGE__, 'order-confirm-1.txt';
     my $msg = $mt->render( $tpl, $order, $user );

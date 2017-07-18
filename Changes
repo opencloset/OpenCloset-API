@@ -4,6 +4,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- `결제대기 -> 대여중` 에서 주문서에 사용자의 신체치수를 복사
+
 ## [v0.0.1] - Thu, 13 Jul 2017 11:44:33 +0900
 
 ### Added
