@@ -232,8 +232,8 @@ subtest '대여중 -> 반납' => sub {
     $api->payment2rental( $order, price_pay_with => '현금' );
 
     my $target_date      = $order->target_date;
-    my $user_target_date = $target_date->clone->add( days => 2 );
-    my $return_date      = $user_target_date->clone->add( days => 2 );
+    my $user_target_date = $target_date->clone->add( days => 2 );      # 2일 연장
+    my $return_date      = $user_target_date->clone->add( days => 2 ); # 2일 연체
     $order->update( { user_target_date => $user_target_date->datetime } );
 
     $success = $api->rental2returned(
@@ -256,6 +256,16 @@ subtest '대여중 -> 반납' => sub {
     ok( $details->search( { name => '연체/연장료 에누리' } )->next, '연체/연장료 에누리' );
     ok( $details->search( { name => '배상비' } )->next,                  '배상비' );
     ok( $details->search( { name => '배상비 에누리' } )->next,        '배상비 에누리' );
+
+    $order = $schema->resultset('Order')->create($order_param);
+    $api->box2boxed( $order, [ @codes, '0T001' ] );
+    $api->boxed2payment($order);
+    $api->payment2rental( $order, price_pay_with => '현금' );
+    $api->rental2partial_returned( $order, \@codes );
+    my $child = $order->orders->first;
+    $child->update( { user_target_date => $user_target_date->datetime } );
+    $success = $api->rental2returned( $child, return_date => $return_date );
+    ok( $success, 'rental2returned without late_fee_pay_with' );
 };
 
 subtest 'additional_day' => sub {
