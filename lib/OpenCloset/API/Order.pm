@@ -364,6 +364,14 @@ C<additional_day> - 연장일수 default is C<0>
 
 =item *
 
+쿠폰이 있다면 쿠폰의 상태를 C<used> 로 변경
+
+=item *
+
+사용자의 신체치수를 복사
+
+=item *
+
 대여자에게 주문내용 및 반납안내 SMS 전송
 
 =item *
@@ -395,26 +403,30 @@ sub payment2rental {
     my $schema = $self->{schema};
     my $guard  = $schema->txn_scope_guard;
 
+    my $user      = $order->user;
+    my $user_info = $user->user_info;
+
     my ( $success, $error ) = try {
-        my $tz          = $order->create_date->time_zone;
-        my $rental_date = DateTime->today( time_zone => $tz->name );
-        my %update      = (
-            status_id      => $RENTAL,
-            price_pay_with => $price_pay_with,
-            rental_date    => $rental_date->datetime,
+        my $tz = $order->create_date->time_zone;
+        my $rental_date = DateTime->today( time_zone => $tz->name ); # 왜 now 가 아니라 today 인거지?
+
+        ## 사용자의 신체치수를 복사
+        my %size;
+        map { $size{$_} = $user_info->$_ } qw/height weight neck bust waist hip topbelly belly thigh arm leg knee foot pants skirt/;
+
+        $order->update(
+            {
+                status_id      => $RENTAL,
+                price_pay_with => $price_pay_with,
+                rental_date    => $rental_date->datetime,
+                %size,
+            }
         );
-
-        ## update order status_id rental_date, additional_day and user_target_date
-        $order->update( \%update );
-
-        ## update clohtes.status_id to $RENTAL
         $order->clothes->update_all( { status_id => $RENTAL } );
-
-        ## update order_details.status_id to $RENTAL
         $order->order_details( { clothes_code => { '!=' => undef } } )->update_all( { status_id => $RENTAL } );
 
         if ( my $coupon = $order->coupon ) {
-            if ( $extra{price_pay_with} =~ m/쿠폰/ ) {
+            if ( $price_pay_with =~ m/쿠폰/ ) {
                 $coupon->update( { status => 'used' } );
             }
         }
@@ -437,10 +449,7 @@ sub payment2rental {
 
     return 1 unless $self->{sms};
 
-    my $user      = $order->user;
-    my $user_info = $user->user_info;
-    my $sms       = OpenCloset::API::SMS->new( schema => $schema );
-
+    my $sms = OpenCloset::API::SMS->new( schema => $schema );
     my $mt  = Mojo::Template->new;
     my $tpl = data_section __PACKAGE__, 'order-confirm-1.txt';
     my $msg = $mt->render( $tpl, $order, $user );
@@ -866,6 +875,8 @@ sub rental2partial_returned {
 
     my $success = $api->payment2box($order);    # 새로주문
 
+새로주문
+
 =over
 
 =item *
@@ -967,7 +978,9 @@ sub payment2box {
         return;
     }
 
-    $self->notify( $order, $PAYMENT, $BOX ) if $self->{notify};
+    return 1 unless $self->{notify};
+
+    $self->notify( $order, $PAYMENT, $BOX );
     return 1;
 }
 
@@ -1027,6 +1040,13 @@ sub rental2payback {
 
         $order->clothes->update_all( { status_id => $PAYBACK } );
         $order->update( { status_id => $PAYBACK } );
+
+        ## 환불하면 쿠폰을 사용가능하도록 변경한다
+        ## https://github.com/opencloset/opencloset/issues/1193
+        if ( my $coupon = $order->coupon ) {
+            $coupon->update( { status => 'reserved' } );
+        }
+
         $guard->commit;
         return 1;
     }
@@ -1041,7 +1061,9 @@ sub rental2payback {
         return;
     }
 
-    $self->notify( $order, $RENTAL, $PAYBACK ) if $self->{notify};
+    return 1 unless $self->{notify};
+
+    $self->notify( $order, $RENTAL, $PAYBACK );
     return 1;
 }
 
