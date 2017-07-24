@@ -4,6 +4,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.0.2] - Mon, 24 Jul 2017 13:09:19 +0900
+
 ### Changed
 - `결제대기 -> 대여중` 에서 주문서에 사용자의 신체치수를 복사
 - 환불하면 쿠폰을 사용가능하도록 변경
