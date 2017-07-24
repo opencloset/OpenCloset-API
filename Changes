@@ -4,6 +4,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- 연체일/연장일이 아닌 연체료/연장료를 기준으로 연체료/연장료 결제방법의 입력 값을 검증 (#8)
+
 ## [v0.0.2] - Mon, 24 Jul 2017 13:09:19 +0900
 
 ### Changed

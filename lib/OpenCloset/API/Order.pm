@@ -626,11 +626,11 @@ sub rental2returned {
         return;
     }
 
-    my $calc           = OpenCloset::Calculator::LateFee->new;
-    my $extension_days = $calc->extension_days( $order, $return_date->datetime );
-    my $overdue_days   = $calc->overdue_days( $order, $return_date->datetime );
+    my $calc          = OpenCloset::Calculator::LateFee->new;
+    my $extension_fee = $calc->extension_fee( $order, $return_date->datetime );
+    my $overdue_fee   = $calc->overdue_fee( $order, $return_date->datetime );
 
-    if ( $extension_days or $overdue_days ) {
+    if ( $extension_fee or $overdue_fee ) {
         $is_late = 1;
 
         unless ($late_fee_pay_with) {
@@ -654,7 +654,8 @@ sub rental2returned {
             $price += $discount;
         }
 
-        if ( my $extension_days = $calc->extension_days( $order, $return_date->datetime ) ) {
+        if ($extension_fee) {
+            my $extension_days = $calc->extension_days( $order, $return_date->datetime );
             my $rate = $OpenCloset::Calculator::LateFee::EXTENSION_RATE;
 
             $order->create_related(
@@ -670,7 +671,8 @@ sub rental2returned {
             ) or die "Failed to create a new order_detail for 연장료";
         }
 
-        if ( my $overdue_days = $calc->overdue_days( $order, $return_date->datetime ) ) {
+        if ($overdue_fee) {
+            my $overdue_days = $calc->overdue_days( $order, $return_date->datetime );
             my $rate = $OpenCloset::Calculator::LateFee::OVERDUE_RATE;
 
             $order->create_related(
