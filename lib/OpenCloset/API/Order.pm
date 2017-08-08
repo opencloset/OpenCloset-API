@@ -410,9 +410,11 @@ sub payment2rental {
         my $tz = $order->create_date->time_zone;
         my $rental_date = DateTime->today( time_zone => $tz->name ); # 왜 now 가 아니라 today 인거지?
 
-        ## 사용자의 신체치수를 복사
+        ## 대리인 대여가 아닐때에, 사용자의 신체치수를 복사
         my %size;
-        map { $size{$_} = $user_info->$_ } qw/height weight neck bust waist hip topbelly belly thigh arm leg knee foot pants skirt/;
+        unless ( $order->agent ) {
+            map { $size{$_} = $user_info->$_ } qw/height weight neck bust waist hip topbelly belly thigh arm leg knee foot pants skirt/;
+        }
 
         $order->update(
             {
