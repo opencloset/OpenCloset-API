@@ -6,7 +6,7 @@ requires 'Try::Tiny';
 # cpan.theopencloset.net
 requires 'OpenCloset::Common';
 requires 'OpenCloset::DB::Plugin::Order::Sale';
-requires 'OpenCloset::Schema';
+requires 'OpenCloset::Schema', '0.054';
 
 on 'test' => sub {
     requires 'DateTime';
