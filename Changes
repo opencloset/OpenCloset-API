@@ -4,6 +4,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.0.4] - Thu, 10 Aug 2017 17:10:18 +0900
+
 ### Changed
 - 대리인 대여가 아닐때에만 사용자정보의 신체치수를 주문서에 복사
 
