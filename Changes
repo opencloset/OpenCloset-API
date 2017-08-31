@@ -4,6 +4,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.0.5] - Thu, 31 Aug 2017 14:17:45 +0900
+
 ### Changed
 - SMS 기본 발신번호 변경 (#10)
 
