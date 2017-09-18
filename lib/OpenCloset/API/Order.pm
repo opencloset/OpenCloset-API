@@ -28,7 +28,7 @@ OpenCloset::API::Order - 주문서의 상태변경 API
     my $api = OpenCloset::API::Order->new(schema => $schema);
     $api->box2boxed($order, ['J001', 'P001']);               # 포장 -> 포장완료
     $api->boxed2payment($order);                             # 포장완료 -> 결제대기
-    $api->payment2rental($order, '현금');                     # 결제대기 -> 대여중
+    $api->payment2rental($order, price_pay_with => '현금');   # 결제대기 -> 대여중
     $api->rental2returned($order);                           # 대여중 -> 반납
     $api->rental2partial_returned($order, ['J001', 'P001']); # 대여중 -> 부분반납
 
