@@ -403,4 +403,16 @@ subtest 'reservated' => sub {
     ok( !$order_with_coupon->coupon_id, 'Transfer coupon' );
 };
 
+subtest 'cancel' => sub {
+    my $user = $schema->resultset('User')->find( { id => 2 } );
+    my $now = DateTime->now( time_zone => 'Asia/Seoul' );
+    my $today = $now->clone->truncate( to => 'day' );
+    my $booking_date = $today->clone->set( hour => 10 );
+    my $order = $api->reservated( $user, booking => $booking_date );
+
+    my $success = $api->cancel($order);
+    ok( $success,            'cancel' );
+    ok( !$order->in_storage, 'Order deleted' );
+};
+
 done_testing();

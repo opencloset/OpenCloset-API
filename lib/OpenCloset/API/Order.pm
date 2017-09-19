@@ -91,7 +91,7 @@ sub new {
 
 =head2 reservated( $user, %extra )
 
-B<주문서없음> -> B<예약완료>
+B<주문서없음> -> B<방문예약>
 
     my $order = $api->reservated($user, booking => '2017-09-19T16:00:00');
 
@@ -240,6 +240,39 @@ sub reservated {
     }
 
     return $order;
+}
+
+=head2 cancel($order);
+
+C<$order> 를 삭제하고 취소 안내 문자메세지를 보냅니다.
+
+    my $success = $api->cancel($order);
+
+=cut
+
+sub cancel {
+    my ( $self, $order ) = @_;
+    return unless $order;
+    return if $order->status_id != $RESERVATED;
+
+    if ( $self->{sms} ) {
+        my $user         = $order->user;
+        my $user_info    = $user->user_info;
+        my $booking_date = $order->booking->date;
+        my $sms          = OpenCloset::API::SMS->new( schema => $self->{schema} );
+        my $mt           = Mojo::Template->new;
+        my $tpl          = data_section __PACKAGE__, 'booking-cancel.txt';
+        my $msg          = $mt->render(
+            $tpl,
+            $user->name,
+            $booking_date->strftime('%m월 %d일 %H시 %M분')
+        );
+        chomp $msg;
+        $sms->send( to => $user_info->phone, msg => $msg );
+    }
+
+    $order->delete;
+    return 1;
 }
 
 =head2 box2boxed( $order, \@codes )
@@ -1523,3 +1556,7 @@ https://story.theopencloset.net/letters/o/<%= $order->id %>/d
 
 @@ employment-wing.txt
 [열린옷장] 취업날개 서비스(면접정장 무료대여)는 주민등록상 '서울시'에 거주 중인 만18세 ~ 34세를 대상으로 합니다. 현장에서 이용조건의 증명이 불가능할 경우 무료 대여가 되지 않습니다. 따라서, 주소와 나이를 증명할 수 있는 신분증(주민등록증, 운전면허증)을 반드시 지참해주시기 바랍니다. 이용조건 증명을 할 수 있는 신분증이 없는 경우 본 서비스를 이용할 수 없다는 점을 거듭 안내드립니다. 감사합니다.
+
+@@ booking-cancel.txt
+% my ($name, $datetime) = @_;
+[열린옷장] <%= $name %>님 <%= $datetime %> 방문 예약이 취소되었습니다.
