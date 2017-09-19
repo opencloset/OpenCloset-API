@@ -5,6 +5,7 @@ use strict;
 use warnings;
 
 use DateTime;
+use DateTime::Format::ISO8601;
 use HTTP::Tiny;
 use Mojo::Loader qw/data_section/;
 use Mojo::Template;
