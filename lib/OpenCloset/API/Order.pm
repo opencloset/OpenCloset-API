@@ -13,7 +13,8 @@ use Try::Tiny;
 use OpenCloset::API::SMS;
 use OpenCloset::Calculator::LateFee;
 use OpenCloset::Constants::Category;
-use OpenCloset::Constants::Status qw/$RENTAL $BOX $BOXED $PAYMENT $RETURNED $CANCEL_BOX $PAYBACK/;
+use OpenCloset::Constants::Status qw/$RENTAL $RESERVATED $BOX $BOXED $PAYMENT $RETURNED $CANCEL_BOX $PAYBACK/;
+use OpenCloset::Events::EmploymentWing ();
 
 use OpenCloset::DB::Plugin::Order::Sale;
 
@@ -26,11 +27,12 @@ OpenCloset::API::Order - 주문서의 상태변경 API
 =head1 SYNOPSIS
 
     my $api = OpenCloset::API::Order->new(schema => $schema);
-    $api->box2boxed($order, ['J001', 'P001']);               # 포장 -> 포장완료
-    $api->boxed2payment($order);                             # 포장완료 -> 결제대기
-    $api->payment2rental($order, price_pay_with => '현금');   # 결제대기 -> 대여중
-    $api->rental2returned($order);                           # 대여중 -> 반납
-    $api->rental2partial_returned($order, ['J001', 'P001']); # 대여중 -> 부분반납
+    $api->reservated($user, booking => '2017-09-19T16:00:00');  # 방문예약
+    $api->box2boxed($order, ['J001', 'P001']);                  # 포장 -> 포장완료
+    $api->boxed2payment($order);                                # 포장완료 -> 결제대기
+    $api->payment2rental($order, price_pay_with => '현금');      # 결제대기 -> 대여중
+    $api->rental2returned($order);                              # 대여중 -> 반납
+    $api->rental2partial_returned($order, ['J001', 'P001']);    # 대여중 -> 부분반납
 
 =cut
 
@@ -84,6 +86,114 @@ sub new {
 
     bless $self, $class;
     return $self;
+}
+
+=head2 reservated( $user, %extra )
+
+B<주문서없음> -> B<예약완료>
+
+    my $order = $api->reservated($user, booking => '2017-09-19T16:00:00');
+
+C<booking> param supports L<DateTime> object.
+
+=cut
+
+sub reservated {
+    my ( $self, $user, %extra ) = @_;
+    return unless $user;
+    return unless $extra{booking};
+
+    my $user_info = $user->user_info;
+    return unless $user_info;
+
+    my $booking_date = $extra{booking};
+    if ( ref($booking_date) ne 'DateTime' ) {
+        my $tz = $user->create_date->time_zone;
+        $booking_date = DateTime::Format::ISO8601->parse_datetime($booking_date);
+        $booking_date->set_time_zone($tz);
+    }
+
+    my $schema  = $self->{schema};
+    my $booking = $schema->resultset('Booking')->find(
+        {
+            date   => "$booking_date",
+            gender => $user_info->gender,
+        }
+    );
+
+    unless ($booking) {
+        warn "Booking datetime is not avaliable: $booking_date";
+        return;
+    }
+
+    my %args = (
+        user_id    => $user->id,
+        status_id  => $RESERVATED,
+        booking_id => $booking->id,
+        coupon_id  => $extra{coupon_id},
+        agent      => $extra{agent} || 0,
+        ignore     => $extra{ignore} || 0,
+    );
+
+    if ( my $id = $extra{past_order} ) {
+        my $order = $schema->resultset('Order')->find( { id => $id } );
+        if ( $order and $order->rental_date ) {
+            $args{misc} = sprintf( "%s 대여했던 의류를 다시 대여하고 싶습니다.", $order->rental_date->ymd );
+        }
+    }
+
+    my $guard = $schema->txn_scope_guard;
+    my ( $order, $error ) = try {
+        my $order = $schema->resultset('Order')->create( \%args );
+        die "Failed to create a new order" unless $order;
+
+        $guard->commit;
+        return $order;
+    }
+    catch {
+        my $err = $_;
+        return ( undef, $err );
+    };
+
+    unless ($order) {
+        warn "Failed to execute reservated: $error";
+        return;
+    }
+
+    return $order unless $self->{sms};
+
+    my $sms      = OpenCloset::API::SMS->new( schema => $schema );
+    my $mt       = Mojo::Template->new;
+    my $tpl      = data_section __PACKAGE__, 'order-reserved-1.txt';
+    my $order_id = $order->id;
+    my $tail     = substr( $user_info->phone, -4 );
+    my $msg      = $mt->render(
+        $tpl,
+        $order,
+        $user->name,
+        $booking_date->strftime('%m월 %d일 %H시 %M분'),
+        "https://visit.theopencloset.net/order/$order_id/booking/edit?phone=$tail"
+    );
+    chomp $msg;
+    $sms->send( to => $user_info->phone, msg => $msg );
+
+    if ( my $coupon = $order->coupon ) {
+        my $desc = $coupon->desc || '';
+        if ( $desc =~ m/^seoul/ ) {
+            my $tpl = data_section __PACKAGE__, 'employment-wing.txt';
+            my $msg = $mt->render($tpl);
+            chomp $msg;
+            $sms->send( to => $user_info->phone, msg => $msg );
+
+            my ( $name, $rent_num, $mbersn ) = split /\|/, $desc;
+            my $client = OpenCloset::Events::EmploymentWing->new;
+            my $success = $client->update_booking_datetime( $rent_num, $booking_date );
+            warn "Failed to update jobwing booking_datetime: rent_num($rent_num), order_id($order_id), datetime($booking_date)"
+                unless $success;
+        }
+    }
+
+    return $order;
 }
 
 =head2 box2boxed( $order, \@codes )
