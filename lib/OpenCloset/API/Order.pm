@@ -95,7 +95,46 @@ B<주문서없음> -> B<예약완료>
 
     my $order = $api->reservated($user, booking => '2017-09-19T16:00:00');
 
-C<booking> param supports L<DateTime> object.
+
+=head3 C<%extra>
+
+=over
+
+=item *
+
+C<booking>
+
+L<DateTime> object or C<YYYY-MM-DDThh:mm:ss> formatted string.
+
+=item *
+
+C<coupon_id>
+
+=item *
+
+C<agent> - boolean
+
+대리인 대여 여부
+
+=item *
+
+C<ignore> - boolean
+
+검색결과에 포함되지 않습니다.
+
+=item *
+
+C<past_order>
+
+지난 대여이력중에 재대여를 원하는 주문서 번호
+
+=item *
+
+C<skip_jobwing> - boolean
+
+true 일때에 취업날개 서비스의 예약시간을 변경하지 않습니다.
+
+=back
 
 =cut
 
