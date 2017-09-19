@@ -385,16 +385,22 @@ subtest 'reservated' => sub {
     is( $order->status_id,               $RESERVATED,             'status_id' );
     is( $order->booking->date->datetime, $booking_date->datetime, 'booking date' );
 
-    my $coupon_param = coupon_param($schema);
-    $coupon_param->{desc} = 'seoul-2017-2|111111111111-111|P111111111';
-    my $coupon = $schema->resultset('Coupon')->create($coupon_param);
-    $order = $api->reservated( $user, booking => $booking_date, coupon_id => $coupon->id, skip_jobwing => 1 );
-    ok( $order->coupon, 'reservated with coupon' );
-
     # past_order
     my $po = $user->orders( { rental_date => { '!=' => undef } } )->next;
     $order = $api->reservated( $user, booking => $booking_date, past_order => $po->id );
     like( $order->misc, qr/대여했던/, 'past_order' );
+
+    my $coupon_param = coupon_param($schema);
+    $coupon_param->{desc} = 'seoul-2017-2|111111111111-111|P111111111';
+    my $coupon = $schema->resultset('Coupon')->create($coupon_param);
+    my $order_with_coupon = $api->reservated( $user, booking => $booking_date, coupon => $coupon, skip_jobwing => 1 );
+    ok( $order_with_coupon->coupon, 'reservated with coupon' );
+
+    $order = $api->reservated( $user, booking => $booking_date, coupon => $coupon );
+    ok($order);
+    ok( $order->coupon, 'Transfer coupon' );
+    $order_with_coupon->discard_changes;
+    ok( !$order_with_coupon->coupon_id, 'Transfer coupon' );
 };
 
 done_testing();
