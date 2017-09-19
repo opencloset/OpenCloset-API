@@ -186,11 +186,13 @@ sub reservated {
             chomp $msg;
             $sms->send( to => $user_info->phone, msg => $msg );
 
-            my ( $name, $rent_num, $mbersn ) = split /\|/, $desc;
-            my $client = OpenCloset::Events::EmploymentWing->new;
-            my $success = $client->update_booking_datetime( $rent_num, $booking_date );
-            warn "Failed to update jobwing booking_datetime: rent_num($rent_num), order_id($order_id), datetime($booking_date)"
-                unless $success;
+            unless ( $extra{skip_jobwing} ) {
+                my ( $name, $rent_num, $mbersn ) = split /\|/, $desc;
+                my $client = OpenCloset::Events::EmploymentWing->new;
+                my $success = $client->update_booking_datetime( $rent_num, $booking_date );
+                warn "Failed to update jobwing booking_datetime: rent_num($rent_num), order_id($order_id), datetime($booking_date)"
+                    unless $success;
+            }
         }
     }
 
