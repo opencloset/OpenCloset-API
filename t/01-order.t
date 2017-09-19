@@ -7,7 +7,7 @@ use DateTime;
 use open ':std', ':encoding(utf8)';
 use Test::More;
 
-use OpenCloset::Constants::Status qw/$RENTABLE $RENTAL $BOXED $PAYMENT $RETURNED $CANCEL_BOX $PAYBACK/;
+use OpenCloset::Constants::Status qw/$RENTABLE $RESERVATED $RENTAL $BOXED $PAYMENT $RETURNED $CANCEL_BOX $PAYBACK/;
 use OpenCloset::Schema;
 use OpenCloset::Calculator::LateFee;
 
@@ -368,6 +368,33 @@ subtest 'rental2payback' => sub {
     $success = $api->rental2payback($order);
     ok( $success, 'rental2payback with coupon' );
     is( $order->coupon->status, 'reserved', 'coupon state is changed to reserved' );
+};
+
+subtest 'reservated' => sub {
+    my $user = $schema->resultset('User')->find( { id => 2 } );
+
+    my $now = DateTime->now( time_zone => 'Asia/Seoul' );
+    my $today = $now->clone->truncate( to => 'day' );
+    my $booking_date = $today->clone->set( hour => 10 );
+    my $order = $api->reservated( $user, booking => $booking_date );
+    ok( $order, 'reservated - booking on datetime obj' );
+
+    $order = $api->reservated( $user, booking => $booking_date->strftime('%FT%T') );
+    ok( $order, 'reservated - booking on datetime str' );
+
+    is( $order->status_id,               $RESERVATED,             'status_id' );
+    is( $order->booking->date->datetime, $booking_date->datetime, 'booking date' );
+
+    my $coupon_param = coupon_param($schema);
+    $coupon_param->{desc} = 'seoul-2017-2|111111111111-111|P111111111';
+    my $coupon = $schema->resultset('Coupon')->create($coupon_param);
+    $order = $api->reservated( $user, booking => $booking_date, coupon_id => $coupon->id, skip_jobwing => 1 );
+    ok( $order->coupon, 'reservated with coupon' );
+
+    # past_order
+    my $po = $user->orders( { rental_date => { '!=' => undef } } )->next;
+    $order = $api->reservated( $user, booking => $booking_date, past_order => $po->id );
+    like( $order->misc, qr/대여했던/, 'past_order' );
 };
 
 done_testing();
