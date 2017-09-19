@@ -96,7 +96,7 @@ B<주문서없음> -> B<예약완료>
     my $order = $api->reservated($user, booking => '2017-09-19T16:00:00');
 
 
-=head3 C<%extra>
+=head3 C<%extra> Args
 
 =over
 
@@ -108,7 +108,7 @@ L<DateTime> object or C<YYYY-MM-DDThh:mm:ss> formatted string.
 
 =item *
 
-C<coupon_id>
+C<coupon>
 
 =item *
 
@@ -166,13 +166,16 @@ sub reservated {
         return;
     }
 
+    my $coupon = $extra{coupon};
+    $self->transfer_order($coupon) if $coupon;
+
     my %args = (
         user_id    => $user->id,
         status_id  => $RESERVATED,
         booking_id => $booking->id,
-        coupon_id  => $extra{coupon_id},
-        agent      => $extra{agent} || 0,
-        ignore     => $extra{ignore} || 0,
+        coupon_id  => $coupon ? $coupon->id : undef,
+        agent  => $extra{agent}  || 0,
+        ignore => $extra{ignore} || 0,
     );
 
     if ( my $id = $extra{past_order} ) {
