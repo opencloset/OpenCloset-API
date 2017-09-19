@@ -156,7 +156,7 @@ sub reservated {
     };
 
     unless ($order) {
-        warn "Failed to execute reservated: $error";
+        warn "reservated failed: $error";
         return;
     }
 
@@ -364,7 +364,7 @@ sub box2boxed {
 
     unless ($success) {
         my $order_id = $order->id;
-        warn "Failed to execute box2boxed($order_id): $error";
+        warn "box2boxed($order_id) failed: $error";
         return;
     }
 
@@ -553,7 +553,7 @@ sub payment2rental {
 
     unless ($success) {
         my $order_id = $order->id;
-        warn "Failed to execute payment2rental($order_id): $error";
+        warn "payment2rental($order_id) failed: $error";
         return;
     }
 
@@ -860,7 +860,7 @@ sub rental2returned {
 
     unless ($success) {
         my $order_id = $order->id;
-        warn "Failed to execute rental2returned($order_id): $error";
+        warn "rental2returned($order_id) failed: $error";
         return;
     }
 
@@ -977,7 +977,7 @@ sub rental2partial_returned {
 
     unless ($success) {
         my $order_id = $order->id;
-        warn "Failed to execute rental2partial_returned($order_id): $error";
+        warn "rental2partial_returned($order_id) failed: $error";
         return;
     }
 
@@ -1088,7 +1088,7 @@ sub payment2box {
 
     unless ($success) {
         my $order_id = $order->id;
-        warn "Failed to execute payment2box($order_id): $error";
+        warn "payment2box($order_id) failed: $error";
         return;
     }
 
@@ -1171,7 +1171,7 @@ sub rental2payback {
 
     unless ($success) {
         my $order_id = $order->id;
-        warn "Failed to execute rental2payback($order_id): $error";
+        warn "rental2payback($order_id) failed: $error";
         return;
     }
 
@@ -1251,7 +1251,7 @@ sub additional_day {
 
     unless ($success) {
         my $order_id = $order->id;
-        warn "Failed to execute additional_day($order_id): $error";
+        warn "additional_day($order_id) failed: $error";
         return;
     }
 
