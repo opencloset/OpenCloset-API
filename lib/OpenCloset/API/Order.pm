@@ -223,6 +223,7 @@ sub reservated {
     if ( my $coupon = $order->coupon ) {
         my $desc = $coupon->desc || '';
         if ( $desc =~ m/^seoul/ ) {
+            ## 취업날개 예약시 신분증 관련한 문자 메세지를 보냄 (opencloset#1061)
             my $tpl = data_section __PACKAGE__, 'employment-wing.txt';
             my $msg = $mt->render($tpl);
             chomp $msg;
