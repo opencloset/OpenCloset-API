@@ -1368,6 +1368,94 @@ sub _sort_codes {
     } @codes;
 }
 
+=head2 transfer_order( $coupon, $to? )
+
+아직 C<$coupon> 이 사용가능하고 어떤 주문서에 속해 있으면, 해당 주문서에서 쿠폰을 제거하고 중복사용과 관련된 코멘트를 남깁니다.
+L<OpenCloset::Schema::Result::Order> 의 object 인 C<$to> 가 정의되어 있다면,
+C<$to> 에 C<$coupon> 을 삽입합니다.
+
+    my $success = $api->transfer_order( $coupon );
+
+=head3 Args
+
+=over
+
+=item *
+
+C<$coupon> - L<OpenCloset::Schema::Result::Coupon> object.
+
+=item *
+
+C<$to> - L<OpenCloset::Schema::Result::Order> object.
+
+=back
+
+=cut
+
+sub transfer_order {
+    my ( $self, $coupon, $to ) = @_;
+    return unless $coupon;
+
+    my $code = $coupon->code;
+    my $status = $coupon->status || '';
+
+    if ( $status =~ m/(us|discard|expir)ed/ ) {
+        print "Coupon is not valid: $code($status)";
+        return;
+    }
+    elsif ( $status eq 'reserved' ) {
+        my $orders = $coupon->orders;
+        unless ( $orders->count ) {
+            print "It is reserved coupon, but the order can not be found: $code";
+        }
+
+        my @orders;
+        while ( my $order = $orders->next ) {
+            my $order_id  = $order->id;
+            my $coupon_id = $order->coupon_id;
+            printf( "Delete coupon_id(%d) from existing order(%d): %s", $order->coupon_id, $order->id, $code );
+
+            my $return_memo = $order->return_memo;
+            $return_memo .= "\n" if $return_memo;
+            $return_memo .= sprintf(
+                "쿠폰의 중복된 요청으로 주문서(%d) 에서 쿠폰(%d)이 삭제되었습니다: %s",
+                $order->id, $order->coupon_id, $code
+            );
+            $order->update( { coupon_id => undef, return_memo => $return_memo } );
+
+            push @orders, $order->id;
+        }
+
+        if ($to) {
+            my $return_memo = $to->return_memo;
+            if (@orders) {
+                printf( "Now, use coupon(%d) in order(%d) %s instead", $coupon->id, $to->id, join( ', ', @orders ) );
+
+                $return_memo .= "\n" if $return_memo;
+                $return_memo .= sprintf(
+                    "%s 에서 사용된 쿠폰(%d)이 주문서(%d)에 사용됩니다: %s",
+                    join( ', ', @orders ),
+                    $coupon->id, $to->id, $code
+                );
+            }
+            else {
+                printf( "Now, use coupon(%d) in order(%d)", $coupon->id, $to->id );
+            }
+
+            $to->update( { coupon_id => $coupon->id, return_memo => $return_memo } );
+        }
+    }
+    elsif ( $status eq 'provided' || $status eq '' ) {
+        $coupon->update( { status => 'reserved' } );
+        if ($to) {
+            printf( "Now, use coupon(%d) in order(%d)", $coupon->id, $to->id );
+            $to->update( { coupon_id => $coupon->id } );
+        }
+    }
+
+    return 1;
+}
+
 =head1 AUTHOR
 
 Hyungsuk Hong
