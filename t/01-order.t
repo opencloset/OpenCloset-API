@@ -376,27 +376,30 @@ subtest 'reservated' => sub {
     my $now = DateTime->now( time_zone => 'Asia/Seoul' );
     my $today = $now->clone->truncate( to => 'day' );
     my $booking_date = $today->clone->set( hour => 10 );
-    my $order = $api->reservated( $user, booking => $booking_date );
+    my $order = $api->reservated( $user, $booking_date );
     ok( $order, 'reservated - booking on datetime obj' );
 
-    $order = $api->reservated( $user, booking => $booking_date->strftime('%FT%T') );
+    $order = $api->reservated( $user, $booking_date->strftime('%FT%T'), online => 1, ignore => 1, agent => 1 );
     ok( $order, 'reservated - booking on datetime str' );
+    is( $order->online, 1, 'online' );
+    is( $order->ignore, 1, 'ignore' );
+    is( $order->agent,  1, 'agent' );
 
     is( $order->status_id,               $RESERVATED,             'status_id' );
     is( $order->booking->date->datetime, $booking_date->datetime, 'booking date' );
 
     # past_order
     my $po = $user->orders( { rental_date => { '!=' => undef } } )->next;
-    $order = $api->reservated( $user, booking => $booking_date, past_order => $po->id );
+    $order = $api->reservated( $user, $booking_date, past_order => $po->id );
     like( $order->misc, qr/대여했던/, 'past_order' );
 
     my $coupon_param = coupon_param($schema);
     $coupon_param->{desc} = 'seoul-2017-2|111111111111-111|P111111111';
     my $coupon = $schema->resultset('Coupon')->create($coupon_param);
-    my $order_with_coupon = $api->reservated( $user, booking => $booking_date, coupon => $coupon, skip_jobwing => 1 );
+    my $order_with_coupon = $api->reservated( $user, $booking_date, coupon => $coupon, skip_jobwing => 1 );
     ok( $order_with_coupon->coupon, 'reservated with coupon' );
 
-    $order = $api->reservated( $user, booking => $booking_date, coupon => $coupon );
+    $order = $api->reservated( $user, $booking_date, coupon => $coupon );
     ok($order);
     ok( $order->coupon, 'Transfer coupon' );
     $order_with_coupon->discard_changes;
@@ -408,7 +411,7 @@ subtest 'cancel' => sub {
     my $now = DateTime->now( time_zone => 'Asia/Seoul' );
     my $today = $now->clone->truncate( to => 'day' );
     my $booking_date = $today->clone->set( hour => 10 );
-    my $order = $api->reservated( $user, booking => $booking_date );
+    my $order = $api->reservated( $user, $booking_date );
 
     my $success = $api->cancel($order);
     ok( $success,            'cancel' );
@@ -428,7 +431,7 @@ subtest 'update_reservated' => sub {
         }
     );
 
-    my $order = $api->reservated( $user, booking => $datetime );
+    my $order = $api->reservated( $user, $datetime );
 
     $datetime->set( hour => 11 );
     $booking = $schema->resultset('Booking')->find_or_create(
