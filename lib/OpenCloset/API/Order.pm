@@ -166,14 +166,11 @@ sub reservated {
         return;
     }
 
-    my $coupon = $extra{coupon};
-    $self->transfer_order($coupon) if $coupon;
-
     my %args = (
         user_id    => $user->id,
         status_id  => $RESERVATED,
         booking_id => $booking->id,
-        coupon_id  => $coupon ? $coupon->id : undef,
+        coupon_id  => $extra{coupon} ? $extra{coupon}->id : undef,
         agent  => $extra{agent}  || 0,
         ignore => $extra{ignore} || 0,
     );
@@ -187,6 +184,9 @@ sub reservated {
 
     my $guard = $schema->txn_scope_guard;
     my ( $order, $error ) = try {
+        ## coupon 중복사용 허용하지 않음
+        $self->transfer_order( $extra{coupon} ) if $extra{coupon};
+
         my $order = $schema->resultset('Order')->create( \%args );
         die "Failed to create a new order" unless $order;
 
@@ -201,6 +201,22 @@ sub reservated {
     unless ($order) {
         warn "reservated failed: $error";
         return;
+    }
+
+    my $is_jobwing;
+    if ( my $coupon = $order->coupon ) {
+        my $desc = $coupon->desc || '';
+        if ( $desc =~ m/^seoul/ ) {
+            $is_jobwing = 1;
+            unless ( $extra{skip_jobwing} ) {
+                my ( $name, $rent_num, $mbersn ) = split /\|/, $desc;
+                my $order_id = $order->id;
+                my $client   = OpenCloset::Events::EmploymentWing->new;
+                my $success  = $client->update_booking_datetime( $rent_num, $booking_date );
+                warn "Failed to update jobwing booking_datetime: rent_num($rent_num), order($order_id), datetime($booking_date)"
+                    unless $success;
+            }
+        }
     }
 
     return $order unless $self->{sms};
@@ -220,24 +236,12 @@ sub reservated {
     chomp $msg;
     $sms->send( to => $user_info->phone, msg => $msg );
 
-    if ( my $coupon = $order->coupon ) {
-        my $desc = $coupon->desc || '';
-        if ( $desc =~ m/^seoul/ ) {
-            ## 취업날개 예약시 신분증 관련한 문자 메세지를 보냄 (opencloset#1061)
-            my $tpl = data_section __PACKAGE__, 'employment-wing.txt';
-            my $msg = $mt->render($tpl);
-            chomp $msg;
-            $sms->send( to => $user_info->phone, msg => $msg );
+    return $order unless $is_jobwing;
 
-            unless ( $extra{skip_jobwing} ) {
-                my ( $name, $rent_num, $mbersn ) = split /\|/, $desc;
-                my $client = OpenCloset::Events::EmploymentWing->new;
-                my $success = $client->update_booking_datetime( $rent_num, $booking_date );
-                warn "Failed to update jobwing booking_datetime: rent_num($rent_num), order_id($order_id), datetime($booking_date)"
-                    unless $success;
-            }
-        }
-    }
+    $tpl = data_section __PACKAGE__, 'employment-wing.txt';
+    $msg = $mt->render($tpl);
+    chomp $msg;
+    $sms->send( to => $user_info->phone, msg => $msg );
 
     return $order;
 }
