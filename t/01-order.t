@@ -7,7 +7,7 @@ use DateTime;
 use open ':std', ':encoding(utf8)';
 use Test::More;
 
-use OpenCloset::Constants::Status qw/$RENTABLE $RENTAL $BOXED $PAYMENT $RETURNED $CANCEL_BOX $PAYBACK/;
+use OpenCloset::Constants::Status qw/$RENTABLE $RESERVATED $RENTAL $BOXED $PAYMENT $RETURNED $CANCEL_BOX $PAYBACK/;
 use OpenCloset::Schema;
 use OpenCloset::Calculator::LateFee;
 
@@ -368,6 +368,98 @@ subtest 'rental2payback' => sub {
     $success = $api->rental2payback($order);
     ok( $success, 'rental2payback with coupon' );
     is( $order->coupon->status, 'reserved', 'coupon state is changed to reserved' );
+};
+
+subtest 'reservated' => sub {
+    my $user = $schema->resultset('User')->find( { id => 2 } );
+
+    my $now = DateTime->now( time_zone => 'Asia/Seoul' );
+    my $today = $now->clone->truncate( to => 'day' );
+    my $booking_date = $today->clone->set( hour => 10 );
+    my $order = $api->reservated( $user, booking => $booking_date );
+    ok( $order, 'reservated - booking on datetime obj' );
+
+    $order = $api->reservated( $user, booking => $booking_date->strftime('%FT%T') );
+    ok( $order, 'reservated - booking on datetime str' );
+
+    is( $order->status_id,               $RESERVATED,             'status_id' );
+    is( $order->booking->date->datetime, $booking_date->datetime, 'booking date' );
+
+    # past_order
+    my $po = $user->orders( { rental_date => { '!=' => undef } } )->next;
+    $order = $api->reservated( $user, booking => $booking_date, past_order => $po->id );
+    like( $order->misc, qr/대여했던/, 'past_order' );
+
+    my $coupon_param = coupon_param($schema);
+    $coupon_param->{desc} = 'seoul-2017-2|111111111111-111|P111111111';
+    my $coupon = $schema->resultset('Coupon')->create($coupon_param);
+    my $order_with_coupon = $api->reservated( $user, booking => $booking_date, coupon => $coupon, skip_jobwing => 1 );
+    ok( $order_with_coupon->coupon, 'reservated with coupon' );
+
+    $order = $api->reservated( $user, booking => $booking_date, coupon => $coupon );
+    ok($order);
+    ok( $order->coupon, 'Transfer coupon' );
+    $order_with_coupon->discard_changes;
+    ok( !$order_with_coupon->coupon_id, 'Transfer coupon' );
+};
+
+subtest 'cancel' => sub {
+    my $user = $schema->resultset('User')->find( { id => 2 } );
+    my $now = DateTime->now( time_zone => 'Asia/Seoul' );
+    my $today = $now->clone->truncate( to => 'day' );
+    my $booking_date = $today->clone->set( hour => 10 );
+    my $order = $api->reservated( $user, booking => $booking_date );
+
+    my $success = $api->cancel($order);
+    ok( $success,            'cancel' );
+    ok( !$order->in_storage, 'Order deleted' );
+};
+
+subtest 'update_reservated' => sub {
+    my $user = $schema->resultset('User')->find( { id => 2 } );
+    my $now = DateTime->now( time_zone => 'Asia/Seoul' );
+    my $today = $now->clone->truncate( to => 'day' );
+    my $datetime = $today->clone->set( hour => 10 );
+    my $booking = $schema->resultset('Booking')->find_or_create(
+        {
+            date   => "$datetime",
+            gender => 'male',
+            slot   => 4,
+        }
+    );
+
+    my $order = $api->reservated( $user, booking => $datetime );
+
+    $datetime->set( hour => 11 );
+    $booking = $schema->resultset('Booking')->find_or_create(
+        {
+            date   => "$datetime",
+            gender => 'male',
+            slot   => 4,
+        }
+    );
+
+    $api->update_reservated( $order, $datetime );
+    my $booking_date = $order->booking->date;
+    is( $booking_date->hour, 11, 'updated booking datetime' );
+
+    $datetime->set( hour => 12 );
+    $booking = $schema->resultset('Booking')->find_or_create(
+        {
+            date   => "$datetime",
+            gender => 'male',
+            slot   => 4,
+        }
+    );
+
+    my $coupon_param = coupon_param($schema);
+    $coupon_param->{desc} = 'seoul-2017-2|111111111111-111|P111111111';
+    my $coupon = $schema->resultset('Coupon')->create($coupon_param);
+
+    $api->update_reservated( $order, $datetime, coupon => $coupon, skip_jobwing => 1 );
+    $booking_date = $order->booking->date;
+    is( $booking_date->hour, 12, 'updated booking datetime' );
+    ok( $order->coupon_id, 'coupon_id' );
 };
 
 done_testing();

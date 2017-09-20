@@ -4,6 +4,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- reservated 방문예약 (#11)
+- update_reservated 방문예약 변경 (#11)
+- cancel 방문예약 취소  (#11)
+
 ## [v0.0.5] - Thu, 31 Aug 2017 14:17:45 +0900
 
 ### Changed
