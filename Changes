@@ -4,6 +4,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- reservated 의 인터페이스 변경
+- update_reservated 에서 agent, ignore, online 을 지원
+
 ## [v0.0.6] - Wed, 20 Sep 2017 11:15:47 +0900
 
 ### Added
