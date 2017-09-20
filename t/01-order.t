@@ -379,8 +379,11 @@ subtest 'reservated' => sub {
     my $order = $api->reservated( $user, $booking_date );
     ok( $order, 'reservated - booking on datetime obj' );
 
-    $order = $api->reservated( $user, $booking_date->strftime('%FT%T') );
+    $order = $api->reservated( $user, $booking_date->strftime('%FT%T'), online => 1, ignore => 1, agent => 1 );
     ok( $order, 'reservated - booking on datetime str' );
+    is( $order->online, 1, 'online' );
+    is( $order->ignore, 1, 'ignore' );
+    is( $order->agent,  1, 'agent' );
 
     is( $order->status_id,               $RESERVATED,             'status_id' );
     is( $order->booking->date->datetime, $booking_date->datetime, 'booking date' );

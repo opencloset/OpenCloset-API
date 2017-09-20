@@ -126,6 +126,12 @@ C<ignore> - boolean
 
 =item *
 
+C<online> - boolean
+
+온라인 주문서 여부
+
+=item *
+
 C<past_order>
 
 지난 대여이력중에 재대여를 원하는 주문서 번호
@@ -174,6 +180,7 @@ sub reservated {
         coupon_id  => $extra{coupon} ? $extra{coupon}->id : undef,
         agent  => $extra{agent}  || 0,
         ignore => $extra{ignore} || 0,
+        online => $extra{online} || 0,
     );
 
     if ( my $id = $extra{past_order} ) {
@@ -279,6 +286,24 @@ C<coupon> - L<OpenCloset::Schema::Result::Coupon> object.
 
 =item *
 
+C<agent> - boolean
+
+대리인 대여 여부
+
+=item *
+
+C<ignore> - boolean
+
+검색결과에 포함되지 않습니다.
+
+=item *
+
+C<online> - boolean
+
+온라인 주문서 여부
+
+=item *
+
 C<skip_jobwing> - boolean
 
 true 일때에 취업날개 서비스의 예약시간을 변경하지 않습니다.
@@ -316,11 +341,18 @@ sub update_reservated {
         return;
     }
 
+    my %args = (
+        booking_id => $booking->id,
+        agent      => $extra{agent} || 0,
+        ignore     => $extra{ignore} || 0,
+        online     => $extra{online} || 0,
+    );
+
     my $guard = $schema->txn_scope_guard;
     my ( $success, $error ) = try {
         ## coupon 중복사용 허용하지 않음
         $self->transfer_order( $extra{coupon}, $order ) if $extra{coupon};
-        $order->update( { booking_id => $booking->id } )->discard_changes();
+        $order->update( \%args )->discard_changes();
         $guard->commit;
         return 1;
     }
