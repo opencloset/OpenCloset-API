@@ -28,7 +28,7 @@ OpenCloset::API::Order - 주문서의 상태변경 API
 =head1 SYNOPSIS
 
     my $api = OpenCloset::API::Order->new(schema => $schema);
-    $api->reservated($user, booking => '2017-09-19T16:00:00');  # 방문예약
+    $api->reservated($user, '2017-09-19T16:00:00');             # 방문예약
     $api->update_reservated($order, $datetime);                 # 방문예약 변경
     $api->cancel($order);                                       # 방문예약 취소
     $api->box2boxed($order, ['J001', 'P001']);                  # 포장 -> 포장완료
@@ -91,11 +91,11 @@ sub new {
     return $self;
 }
 
-=head2 reservated( $user, %extra )
+=head2 reservated( $user, $datetime, %extra )
 
 B<주문서없음> -> B<방문예약>
 
-    my $order = $api->reservated($user, booking => '2017-09-19T16:00:00');
+    my $order = $api->reservated($user, '2017-09-19T16:00:00');
 
 
 =head3 C<%extra> Args
@@ -141,30 +141,29 @@ true 일때에 취업날개 서비스의 예약시간을 변경하지 않습니�
 =cut
 
 sub reservated {
-    my ( $self, $user, %extra ) = @_;
+    my ( $self, $user, $datetime, %extra ) = @_;
     return unless $user;
-    return unless $extra{booking};
+    return unless $datetime;
 
     my $user_info = $user->user_info;
     return unless $user_info;
 
-    my $booking_date = $extra{booking};
-    if ( ref($booking_date) ne 'DateTime' ) {
+    if ( ref($datetime) ne 'DateTime' ) {
         my $tz = $user->create_date->time_zone;
-        $booking_date = DateTime::Format::ISO8601->parse_datetime($booking_date);
-        $booking_date->set_time_zone($tz);
+        $datetime = DateTime::Format::ISO8601->parse_datetime($datetime);
+        $datetime->set_time_zone($tz);
     }
 
     my $schema  = $self->{schema};
     my $booking = $schema->resultset('Booking')->find(
         {
-            date   => "$booking_date",
+            date   => "$datetime",
             gender => $user_info->gender,
         }
     );
 
     unless ($booking) {
-        warn "Booking datetime is not avaliable: $booking_date";
+        warn "Booking datetime is not avaliable: $datetime";
         return;
     }
 
@@ -214,8 +213,8 @@ sub reservated {
                 my ( $name, $rent_num, $mbersn ) = split /\|/, $desc;
                 my $order_id = $order->id;
                 my $client   = OpenCloset::Events::EmploymentWing->new;
-                my $success  = $client->update_booking_datetime( $rent_num, $booking_date );
-                warn "Failed to update jobwing booking_datetime: rent_num($rent_num), order($order_id), datetime($booking_date)"
+                my $success  = $client->update_booking_datetime( $rent_num, $datetime );
+                warn "Failed to update jobwing booking_datetime: rent_num($rent_num), order($order_id), datetime($datetime)"
                     unless $success;
             }
         }
@@ -232,7 +231,7 @@ sub reservated {
         $tpl,
         $order,
         $user->name,
-        $booking_date->strftime('%m월 %d일 %H시 %M분'),
+        $datetime->strftime('%m월 %d일 %H시 %M분'),
         "https://visit.theopencloset.net/order/$order_id/booking/edit?phone=$tail"
     );
     chomp $msg;
