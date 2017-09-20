@@ -29,6 +29,8 @@ OpenCloset::API::Order - 주문서의 상태변경 API
 
     my $api = OpenCloset::API::Order->new(schema => $schema);
     $api->reservated($user, booking => '2017-09-19T16:00:00');  # 방문예약
+    $api->update_reservated($order, $datetime);                 # 방문예약 변경
+    $api->cancel($order);                                       # 방문예약 취소
     $api->box2boxed($order, ['J001', 'P001']);                  # 포장 -> 포장완료
     $api->boxed2payment($order);                                # 포장완료 -> 결제대기
     $api->payment2rental($order, price_pay_with => '현금');      # 결제대기 -> 대여중
@@ -244,6 +246,125 @@ sub reservated {
     $sms->send( to => $user_info->phone, msg => $msg );
 
     return $order;
+}
+
+=head2 update_reservated($order, $datetime, %extra)
+
+    my $success = $api->update_reservateda($order, '2017-09-20T10:00:00');
+
+예약시간을 변경하고 변경안내 SMS 를 보냅니다.
+
+=head3 Args
+
+=over
+
+=item *
+
+C<$order>
+
+=item *
+
+C<$datetime> - L<DateTime> object or C<YYYY-MM-DDThh:mm:ss> formatted string.
+
+=item *
+
+C<%extra>
+
+=over
+
+=item *
+
+C<coupon> - L<OpenCloset::Schema::Result::Coupon> object.
+
+쿠폰없이 예약했던 주문서에 쿠폰을 넣을 수 있습니다.
+
+=item *
+
+C<skip_jobwing> - boolean
+
+true 일때에 취업날개 서비스의 예약시간을 변경하지 않습니다.
+
+=back
+
+=back
+
+=cut
+
+sub update_reservated {
+    my ( $self, $order, $datetime, %extra ) = @_;
+    return unless $order;
+    return unless $datetime;
+    return if $order->status_id != $RESERVATED;
+
+    if ( ref($datetime) ne 'DateTime' ) {
+        my $tz = $order->create_date->time_zone;
+        $datetime = DateTime::Format::ISO8601->parse_datetime($datetime);
+        $datetime->set_time_zone($tz);
+    }
+
+    my $schema    = $self->{schema};
+    my $user      = $order->user;
+    my $user_info = $user->user_info;
+    my $booking   = $schema->resultset('Booking')->find(
+        {
+            date   => "$datetime",
+            gender => $user_info->gender,
+        }
+    );
+
+    unless ($booking) {
+        warn "Booking datetime is not avaliable: $datetime";
+        return;
+    }
+
+    my $guard = $schema->txn_scope_guard;
+    my ( $success, $error ) = try {
+        ## coupon 중복사용 허용하지 않음
+        $self->transfer_order( $extra{coupon}, $order ) if $extra{coupon};
+        $order->update( { booking_id => $booking->id } )->discard_changes();
+        $guard->commit;
+        return 1;
+    }
+    catch {
+        my $err = $_;
+        return ( undef, $err );
+    };
+
+    unless ($success) {
+        warn "update_reservated failed: $error";
+        return;
+    }
+
+    my $is_jobwing;
+    if ( my $coupon = $order->coupon ) {
+        my $desc = $coupon->desc || '';
+        if ( $desc =~ m/^seoul/ ) {
+            $is_jobwing = 1;
+            unless ( $extra{skip_jobwing} ) {
+                my ( $name, $rent_num, $mbersn ) = split /\|/, $desc;
+                my $order_id = $order->id;
+                my $client   = OpenCloset::Events::EmploymentWing->new;
+                my $success  = $client->update_booking_datetime( $rent_num, $datetime );
+                warn "Failed to update jobwing booking_datetime: rent_num($rent_num), order($order_id), datetime($datetime)"
+                    unless $success;
+            }
+        }
+    }
+
+    return 1 unless $self->{sms};
+
+    my $sms = OpenCloset::API::SMS->new( schema => $schema );
+    my $mt  = Mojo::Template->new;
+    my $tpl = data_section __PACKAGE__, 'booking-datetime-update.txt';
+    my $msg = $mt->render(
+        $tpl,
+        $user->name,
+        $datetime->strftime('%m월 %d일 %H시 %M분')
+    );
+    chomp $msg;
+    $sms->send( to => $user_info->phone, msg => $msg );
+
+    return 1;
 }
 
 =head2 cancel($order);
@@ -1564,3 +1685,7 @@ https://story.theopencloset.net/letters/o/<%= $order->id %>/d
 @@ booking-cancel.txt
 % my ($name, $datetime) = @_;
 [열린옷장] <%= $name %>님 <%= $datetime %> 방문 예약이 취소되었습니다.
+
+@@ booking-datetime-update.txt
+% my ($name, $datetime) = @_;
+[열린옷장] <%= $name %>님 <%= $datetime %>으로 방문 예약이 변경되었습니다.

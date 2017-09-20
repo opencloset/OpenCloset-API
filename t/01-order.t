@@ -415,4 +415,51 @@ subtest 'cancel' => sub {
     ok( !$order->in_storage, 'Order deleted' );
 };
 
+subtest 'update_reservated' => sub {
+    my $user = $schema->resultset('User')->find( { id => 2 } );
+    my $now = DateTime->now( time_zone => 'Asia/Seoul' );
+    my $today = $now->clone->truncate( to => 'day' );
+    my $datetime = $today->clone->set( hour => 10 );
+    my $booking = $schema->resultset('Booking')->find_or_create(
+        {
+            date   => "$datetime",
+            gender => 'male',
+            slot   => 4,
+        }
+    );
+
+    my $order = $api->reservated( $user, booking => $datetime );
+
+    $datetime->set( hour => 11 );
+    $booking = $schema->resultset('Booking')->find_or_create(
+        {
+            date   => "$datetime",
+            gender => 'male',
+            slot   => 4,
+        }
+    );
+
+    $api->update_reservated( $order, $datetime );
+    my $booking_date = $order->booking->date;
+    is( $booking_date->hour, 11, 'updated booking datetime' );
+
+    $datetime->set( hour => 12 );
+    $booking = $schema->resultset('Booking')->find_or_create(
+        {
+            date   => "$datetime",
+            gender => 'male',
+            slot   => 4,
+        }
+    );
+
+    my $coupon_param = coupon_param($schema);
+    $coupon_param->{desc} = 'seoul-2017-2|111111111111-111|P111111111';
+    my $coupon = $schema->resultset('Coupon')->create($coupon_param);
+
+    $api->update_reservated( $order, $datetime, coupon => $coupon, skip_jobwing => 1 );
+    $booking_date = $order->booking->date;
+    is( $booking_date->hour, 12, 'updated booking datetime' );
+    ok( $order->coupon_id, 'coupon_id' );
+};
+
 done_testing();
