@@ -4,6 +4,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.1.1] - Fri, 20 Oct 2017 15:03:34 +0900
+
+### Fixed
+- update_reservated 에서 결제대기 주문서도 허용
+
 ## [v0.1.0] - Wed, 20 Sep 2017 13:30:58 +0900
 
 ### Changed
