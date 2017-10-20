@@ -7,7 +7,7 @@ use DateTime;
 use open ':std', ':encoding(utf8)';
 use Test::More;
 
-use OpenCloset::Constants::Status qw/$RENTABLE $RESERVATED $RENTAL $BOXED $PAYMENT $RETURNED $CANCEL_BOX $PAYBACK/;
+use OpenCloset::Constants::Status qw/$RENTABLE $RESERVATED $RENTAL $BOXED $PAYMENT $RETURNED $CANCEL_BOX $PAYBACK $BOX/;
 use OpenCloset::Schema;
 use OpenCloset::Calculator::LateFee;
 
@@ -463,6 +463,20 @@ subtest 'update_reservated' => sub {
     $booking_date = $order->booking->date;
     is( $booking_date->hour, 12, 'updated booking datetime' );
     ok( $order->coupon_id, 'coupon_id' );
+
+    $api->cancel($order);
+    $order = $api->reservated( $user, $datetime );
+    $order->update( { status_id => $BOX } );
+    $api->box2boxed( $order, [ 'J001', 'P001' ] );
+    $api->boxed2payment($order);
+
+    $coupon_param         = coupon_param($schema);
+    $coupon_param->{desc} = 'test';
+    $coupon               = $schema->resultset('Coupon')->create($coupon_param);
+
+    my $success = $api->update_reservated( $order, $datetime, coupon => $coupon, skip_jobwing => 1 );
+    ok( $success, 'update_reservated at status in PAYMENT' );
+    is( $order->coupon_id, $coupon->id, 'transfered coupon' );
 };
 
 done_testing();

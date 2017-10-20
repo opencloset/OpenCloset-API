@@ -318,7 +318,7 @@ sub update_reservated {
     my ( $self, $order, $datetime, %extra ) = @_;
     return unless $order;
     return unless $datetime;
-    return if $order->status_id != $RESERVATED;
+    return if $order->status_id != $RESERVATED && $order->status_id != $PAYMENT;
 
     if ( ref($datetime) ne 'DateTime' ) {
         my $tz = $order->create_date->time_zone;
