@@ -27,7 +27,10 @@ OpenCloset::API::Order - 주문서의 상태변경 API
 
 =head1 SYNOPSIS
 
-    my $api = OpenCloset::API::Order->new(schema => $schema);
+    my $api = OpenCloset::API::Order->new(
+        schema      => $schema,
+        monitor_uri => 'https://monitor.theopencloset.net',
+    );
     $api->reservated($user, '2017-09-19T16:00:00');             # 방문예약
     $api->update_reservated($order, $datetime);                 # 방문예약 변경
     $api->cancel($order);                                       # 방문예약 취소
@@ -39,13 +42,14 @@ OpenCloset::API::Order - 주문서의 상태변경 API
 
 =cut
 
-our $MONITOR_HOST = $ENV{OPENCLOSET_MONITOR_HOST} || "https://monitor.theopencloset.net";
-
 =head1 METHODS
 
 =head2 new
 
-    my $api = OpenCloset::API::Order->new(schema => $schema);
+    my $api = OpenCloset::API::Order->new(
+        schema      => $schema,
+        monitor_uri => 'https://monitor.theopencloset.net',
+    );
 
 =over
 
@@ -67,6 +71,13 @@ sms - Boolean
 사용자에게 상태에 따라 SMS 를 전송합니다.
 default 는 true 입니다.
 
+=item *
+
+monitor_uri - Str
+
+모니터 서비스 URI 입니다.
+default 는 C<""> 입니다.
+
 =back
 
 =cut
@@ -75,10 +86,11 @@ sub new {
     my ( $class, %args ) = @_;
 
     my $self = {
-        schema => $args{schema},
-        notify => $args{notify} // 1,
-        sms    => $args{sms} // 1,
-        http   => HTTP::Tiny->new(
+        schema      => $args{schema},
+        notify      => $args{notify} // 1,
+        sms         => $args{sms} // 1,
+        monitor_uri => $args{monitor_uri} // q{},
+        http        => HTTP::Tiny->new(
             timeout         => 3,
             default_headers => {
                 agent        => __PACKAGE__,
@@ -774,6 +786,29 @@ sub payment2rental {
 
         if ( my $coupon = $order->coupon ) {
             if ( $price_pay_with =~ m/쿠폰/ ) {
+                my $coupon_limit = $self->{schema}->resultset('CouponLimit')->find({ cid => $order->coupon->desc });
+                if ($coupon_limit) {
+                    my $coupon_count = $self->{schema}->resultset('Coupon')->search(
+                        {
+                            desc   => $order->coupon->desc,
+                            status => 'used',
+                        },
+                    )->count;
+
+                    my $log_str = sprintf(
+                        "coupon: code(%s), limit(%d), count(%s)",
+                        $order->coupon->code,
+                        $coupon_limit->limit,
+                        $coupon_count,
+                    );
+                    if ( $coupon_limit->limit == -1 || $coupon_count < $coupon_limit->limit ) {
+                        warn "$log_str\n";
+                    }
+                    else {
+                        die "coupon limit reached: $log_str\n";
+                    }
+                }
+
                 $coupon->update( { status => 'used' } );
             }
         }
@@ -1501,16 +1536,24 @@ sub additional_day {
 
 sub notify {
     my ( $self, $order, $from, $to ) = @_;
+
+    return unless $self->{monitor_uri};
     return unless $order;
     return unless $from;
     return unless $to;
 
+    my $url = sprintf '%s/events', $self->{monitor_uri};
     my $res = $self->{http}->post_form(
-        "$MONITOR_HOST/events",
-        { sender => 'order', order_id => $order->id, from => $from, to => $to }
+        $url,
+        {
+            sender   => 'order',
+            order_id => $order->id,
+            from     => $from,
+            to       => $to,
+        }
     );
 
-    warn "Failed to post event to monitor: $MONITOR_HOST/events: $res->{reason}" unless $res->{success};
+    warn "Failed to post event to monitor: ${url}: $res->{reason}" unless $res->{success};
     return $res;
 }
 
