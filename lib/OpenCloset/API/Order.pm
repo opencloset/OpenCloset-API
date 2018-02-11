@@ -786,6 +786,29 @@ sub payment2rental {
 
         if ( my $coupon = $order->coupon ) {
             if ( $price_pay_with =~ m/쿠폰/ ) {
+                my $coupon_limit = $self->{schema}->resultset('CouponLimit')->find({ cid => $order->coupon->desc });
+                if ($coupon_limit) {
+                    my $coupon_count = $self->{schema}->resultset('Coupon')->search(
+                        {
+                            desc   => $order->coupon->desc,
+                            status => 'used',
+                        },
+                    )->count;
+
+                    my $log_str = sprintf(
+                        "coupon: code(%s), limit(%d), count(%s)",
+                        $order->coupon->code,
+                        $coupon_limit->limit,
+                        $coupon_count,
+                    );
+                    if ( $coupon_limit->limit == -1 || $coupon_count < $coupon_limit->limit ) {
+                        warn "$log_str\n";
+                    }
+                    else {
+                        die "coupon limit reached: $log_str\n";
+                    }
+                }
+
                 $coupon->update( { status => 'used' } );
             }
         }
