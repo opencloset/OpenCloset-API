@@ -8,7 +8,7 @@ requires 'Try::Tiny';
 requires 'OpenCloset::Common';
 requires 'OpenCloset::DB::Plugin::Order::Sale';
 requires 'OpenCloset::Events::EmploymentWing';
-requires 'OpenCloset::Schema', '0.054';
+requires 'OpenCloset::Schema', '0.056';
 
 on 'test' => sub {
     requires 'DateTime';
