@@ -4,6 +4,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.1.2] - Mon, 12 Feb 2018 03:34:50 +0900
+
 ### Changed
 - 쿠폰 허용 개수 제한을 고려해 사용을 가능하게 함 (#14)
 - 객체 생성 시 명시적으로 모니터 서비스 주소를 인자로 전달함 (#15)
