@@ -4,6 +4,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- 객체 생성 시 명시적으로 모니터 서비스 주소를 인자로 전달함 (#15)
+
 ## [v0.1.1] - Fri, 20 Oct 2017 15:03:34 +0900
 
 ### Fixed
