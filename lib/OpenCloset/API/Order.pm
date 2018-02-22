@@ -387,7 +387,7 @@ sub update_reservated {
                 my ( $name, $rent_num, $mbersn ) = split /\|/, $desc;
                 my $order_id = $order->id;
                 my $client   = OpenCloset::Events::EmploymentWing->new;
-                my $success  = $client->update_booking_datetime( $rent_num, $datetime );
+                my $success  = $client->update_booking_datetime( $rent_num, $datetime, undef, 1 );
                 warn "Failed to update jobwing booking_datetime: rent_num($rent_num), order($order_id), datetime($datetime)"
                     unless $success;
             }
@@ -786,7 +786,7 @@ sub payment2rental {
 
         if ( my $coupon = $order->coupon ) {
             if ( $price_pay_with =~ m/쿠폰/ ) {
-                my $coupon_limit = $self->{schema}->resultset('CouponLimit')->find({ cid => $order->coupon->desc });
+                my $coupon_limit = $self->{schema}->resultset('CouponLimit')->find( { cid => $order->coupon->desc } );
                 if ($coupon_limit) {
                     my $coupon_count = $self->{schema}->resultset('Coupon')->search(
                         {

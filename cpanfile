@@ -7,7 +7,7 @@ requires 'Try::Tiny';
 # cpan.theopencloset.net
 requires 'OpenCloset::Common';
 requires 'OpenCloset::DB::Plugin::Order::Sale';
-requires 'OpenCloset::Events::EmploymentWing';
+requires 'OpenCloset::Events::EmploymentWing', 'v0.1.0';
 requires 'OpenCloset::Schema', '0.056';
 
 on 'test' => sub {

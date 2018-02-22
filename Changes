@@ -4,6 +4,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.1.3] - Thu, 22 Feb 2018 12:56:48 +0900
+
+### Changed
+- 취업날개 최초예약과 예약시간변경의 호출 parameter 를 다르게 함
+
 ## [v0.1.2] - Mon, 12 Feb 2018 03:34:50 +0900
 
 ### Changed
