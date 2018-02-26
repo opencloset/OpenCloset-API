@@ -4,6 +4,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.1.4] - Tue, 27 Feb 2018 01:11:27 +0900
+
 ### Changed
 - 취업날개 방문예약시 발송되는 문자 메세지 내용 수정 (#18)
 
