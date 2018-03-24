@@ -4,6 +4,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.1.5] - Sat, 24 Mar 2018 12:59:57 +0900
+
 ### Changed
 - 예약이나 예약변경시 주문서의 의류착용일을 사용자의 의류착용일로 수정 (#11)
 
