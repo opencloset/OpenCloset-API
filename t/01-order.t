@@ -372,9 +372,11 @@ subtest 'rental2payback' => sub {
 
 subtest 'reservated' => sub {
     my $user = $schema->resultset('User')->find( { id => 2 } );
+    my $user_info = $user->user_info;
 
     my $now = DateTime->now( time_zone => 'Asia/Seoul' );
     my $today = $now->clone->truncate( to => 'day' );
+    $user_info->update( { wearon_date => $today } );
     my $booking_date = $today->clone->set( hour => 10 );
     my $order = $api->reservated( $user, $booking_date );
     ok( $order, 'reservated - booking on datetime obj' );
@@ -387,6 +389,7 @@ subtest 'reservated' => sub {
 
     is( $order->status_id,               $RESERVATED,             'status_id' );
     is( $order->booking->date->datetime, $booking_date->datetime, 'booking date' );
+    is( $order->wearon_date,             $today,                  'wearon_date' );
 
     # past_order
     my $po = $user->orders( { rental_date => { '!=' => undef } } )->next;
