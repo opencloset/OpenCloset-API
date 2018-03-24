@@ -186,10 +186,11 @@ sub reservated {
     }
 
     my %args = (
-        user_id    => $user->id,
-        status_id  => $RESERVATED,
-        booking_id => $booking->id,
-        coupon_id  => $extra{coupon} ? $extra{coupon}->id : undef,
+        user_id     => $user->id,
+        status_id   => $RESERVATED,
+        booking_id  => $booking->id,
+        wearon_date => $user_info->wearon_date,
+        coupon_id   => $extra{coupon} ? $extra{coupon}->id : undef,
         agent  => $extra{agent}  || 0,
         ignore => $extra{ignore} || 0,
         online => $extra{online} || 0,
@@ -354,10 +355,11 @@ sub update_reservated {
     }
 
     my %args = (
-        booking_id => $booking->id,
-        agent      => $extra{agent} || 0,
-        ignore     => $extra{ignore} || 0,
-        online     => $extra{online} || 0,
+        booking_id  => $booking->id,
+        wearon_date => $user_info->wearon_date,
+        agent       => $extra{agent} || 0,
+        ignore      => $extra{ignore} || 0,
+        online      => $extra{online} || 0,
     );
 
     my $guard = $schema->txn_scope_guard;
