@@ -1143,7 +1143,8 @@ sub rental2returned {
     my $user_info = $user->user_info;
     my $sms       = OpenCloset::API::SMS->new( schema => $schema );
     my $mt        = Mojo::Template->new;
-    my $tpl       = data_section __PACKAGE__, 'returned-1.txt';
+    my $section   = $order->online ? 'returned-online-1.txt' : 'returned-1.txt';
+    my $tpl       = data_section __PACKAGE__, $section;
     my $msg       = $mt->render( $tpl, $order, $user );
     chomp $msg;
 
@@ -1739,6 +1740,12 @@ https://story.theopencloset.net/letters/o/<%= $order->id %>/d
 @@ returned-1.txt
 % my ($order, $user) = @_;
 [열린옷장] <%= $user->name %>님의 의류가 정상적으로 반납되었습니다. 감사합니다.
+다음에는 온라인택배로 집에서 편~하게 대여해보세요. https://share.theopencloset.net/welcome 를 클릭하여 신청하시면 됩니다.
+
+@@ returned-online-1.txt
+% my ($order, $user) = @_;
+[열린옷장] <%= $user->name %>님의 의류가 정상적으로 반납되었습니다. 감사합니다.
+택배대여 중 불편하셨던 점 많으셨죠? 개선을 위한 설문조사입니다. 작성해주시면 꼭 반영하겠습니다. https://bit.ly/2Mv1Ipr
 
 @@ order-reserved-1.txt
 % my ($order, $name, $datetime, $edit_url) = @_;
