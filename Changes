@@ -3,6 +3,8 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
+### Changed
+- 반납 확인 메세지를 online/offline 구별해서 전송 (#19)
 
 ## [v0.1.5] - Sat, 24 Mar 2018 12:59:57 +0900
 
