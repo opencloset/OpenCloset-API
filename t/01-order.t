@@ -183,6 +183,12 @@ subtest '결제대기 -> 대여중' => sub {
     ok( $success, 'payment2rental' );
     is( $order->status_id, $RENTAL, 'status_id' );
 
+    my $user_info = $schema->resultset('UserInfo')->find({ user_id => $order_param->{user_id} });
+    is( $order->purpose, $user_info->purpose, 'order.purpose' );
+    is( $order->purpose2, $user_info->purpose2, 'order.purpose2' );
+    is( $order->pre_category, $user_info->pre_category, 'order.pre_category' );
+    is( $order->pre_color, $user_info->pre_color, 'order.pre_color' );
+
     $order_param = order_param($schema);
     $order_param->{user_id} = 2;
 
