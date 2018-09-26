@@ -775,11 +775,18 @@ sub payment2rental {
             map { $size{$_} = $user_info->$_ } qw/height weight neck bust waist hip topbelly belly thigh arm leg knee foot pants skirt/;
         }
 
+        my $comment = $user_info->comment ? $user_info->comment . "\n" : q{};
+        my $desc    = $order->desc        ? $order->desc . "\n"        : q{};
         $order->update(
             {
                 status_id      => $RENTAL,
                 price_pay_with => $price_pay_with,
                 rental_date    => $rental_date->datetime,
+                purpose        => $user_info->purpose,
+                purpose2       => $user_info->purpose2,
+                pre_category   => $user_info->pre_category,
+                pre_color      => $user_info->pre_color,
+                desc           => $comment . $desc,
                 %size,
             }
         );

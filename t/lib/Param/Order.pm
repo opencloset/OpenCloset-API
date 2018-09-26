@@ -3,6 +3,7 @@ require Exporter;
 @ISA       = qw(Exporter);
 @EXPORT_OK = qw(order_param);
 
+use utf8;
 use strict;
 use warnings;
 use DateTime;
