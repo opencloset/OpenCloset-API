@@ -3,6 +3,8 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
+### Changed
+- 대여가 확정되었을때에 사용자정보의 특정 값을 주문서로 복사 (#21)
 
 ## [v0.1.6] - Sun, 16 Sep 2018 15:11:39 +0900
 ### Changed
