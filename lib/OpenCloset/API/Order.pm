@@ -259,8 +259,9 @@ sub reservated {
 
     return $order unless $is_jobwing;
 
+    my $year = (localtime)[5] + 1900;
     $tpl = data_section __PACKAGE__, 'employment-wing.txt';
-    $msg = $mt->render($tpl);
+    $msg = $mt->render($tpl, $year);
     chomp $msg;
     $sms->send( to => $user_info->phone, msg => $msg );
 
@@ -1770,7 +1771,8 @@ https://story.theopencloset.net/letters/o/<%= $order->id %>/d
 열린옷장은 하루에 방문 가능한 예약 인원이 정해져 있습니다. 방문이 어려운 경우 다른 분을 위해 반드시 '예약취소' 해주세요. 예약취소는 세 시간 전까지 가능합니다.
 
 @@ employment-wing.txt
-[열린옷장] 2018 취업날개 서비스
+% my ($year) = @_;
+[열린옷장] <%= $year %> 취업날개 서비스
 
 올해 면접정장 무료대여는 '서울시' 거주 중인 고교졸업예정자~34세를 대상으로 합니다. 아래 거주지 증빙 미지참시 무료 대여가 되지 않습니다.
 
