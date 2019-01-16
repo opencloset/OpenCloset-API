@@ -4,6 +4,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- 쿠폰 limit 갯수 파악을 위해 coupon.desc 대신에 coupon.event_id 를 참조함 (#1537)
+
 ## [v0.1.8] - Tue, 15 Jan 2019 17:43:08 +0900
 ### Changed
 - 서울시 이벤트 예약확정 문자의 연도(year) 변경
