@@ -795,10 +795,11 @@ sub payment2rental {
         $order->order_details( { clothes_code => { '!=' => undef } } )->update_all( { status_id => $RENTAL } );
 
         if ( my $coupon = $order->coupon ) {
-            my $event = $coupon->event;
-            if ( $price_pay_with =~ m/쿠폰/ && $event ) {
-                my $coupon_limit = $self->{schema}->resultset('CouponLimit')->find( { cid => $event->name } );
-                if ($coupon_limit) {
+            if ( $price_pay_with =~ m/쿠폰/ ) {
+                my $event = $coupon->event;
+                my $cid = $event ? $event->name : $coupon->desc;
+                my $coupon_limit = $self->{schema}->resultset('CouponLimit')->find( { cid => $cid } );
+                if ($coupon_limit && $event) {
                     my $coupon_count = $self->{schema}->resultset('Coupon')->search(
                         {
                             event_id => $event->id,
