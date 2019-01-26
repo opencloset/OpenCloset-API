@@ -1750,7 +1750,14 @@ https://story.theopencloset.net/letters/o/<%= $order->id %>/d
 @@ returned-1.txt
 % my ($order, $user) = @_;
 [열린옷장] <%= $user->name %>님의 의류가 정상적으로 반납되었습니다. 감사합니다.
-다음에는 온라인택배로 집에서 편~하게 대여해보세요. https://share.theopencloset.net/welcome 를 클릭하여 신청하시면 됩니다.
+
+[택배대여 안내] 다음에는 집에서 편하게 온라인으로 주문하세요.
+http://share.theopencloset.net/welcome  클릭하여 신청하시면 됩니다.
+
+[청년정보 안내] 청년과 취업을 응원하는 다양한 프로그램 진행 중입니다.
+열린옷장 SNS를 팔로우하면 놓치지 않고 받을 수 있습니다.
+https://www.instagram.com/opencloset_people/
+https://www.facebook.com/TheOpenCloset/
 
 @@ returned-online-1.txt
 % my ($order, $user) = @_;
