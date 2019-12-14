@@ -480,6 +480,10 @@ B<포장> -> B<포장완료>
 
 =item *
 
+셋트여부를 판별해서 타이의 가격을 책정
+
+=item *
+
 opencloset/monitor 에 event 를 posting
 
 =back
@@ -493,6 +497,7 @@ sub box2boxed {
 
     my @codes = map { sprintf( '%05s', $_ ) } @$codes;
     @codes = $self->_sort_codes(@codes);
+    my $isSuitSet = $self->_is_suit_set(@codes);
 
     my $schema = $self->{schema};
     my $guard  = $schema->txn_scope_guard;
@@ -510,14 +515,20 @@ sub box2boxed {
             my $name = join( q{ - }, $trim_code, $OpenCloset::Constants::Category::LABEL_MAP{$category} );
             $clothes->update( { status_id => $PAYMENT } );
 
+            my $price = $clothes->price;
+            if (!$isSuitSet and $clothes->category eq $TIE) {
+                ## https://github.com/opencloset/OpenCloset-API/issues/26
+                ## 셋트대여가 아닐때에는 타이의 가격을 2000 으로 책정
+                $price = 2_000;
+            }
             ## 3회 이상 대여 할인 대상자의 경우 가격이 변경되기 때문에 미리 넣으면 아니됨
             push @order_details, {
                 clothes_code     => $code,
                 clothes_category => $clothes->category,
                 status_id        => $PAYMENT,
                 name             => $name,
-                price            => $clothes->price,
-                final_price      => $clothes->price,
+                price            => $price,
+                final_price      => $price,
             };
 
             ## 사용자의 구두 사이즈를 주문서의 구두 사이즈로 변경 (#1251)
@@ -1703,6 +1714,24 @@ sub transfer_order {
     }
 
     return 1;
+}
+
+=head2 _is_suit_set(@codes)
+
+C<@codes> 는 의류코드 (e.g 0J001, ..)
+
+의류코드로 셋트대여인지 여부를 판별해줍니다.
+자켓+팬츠가 포함된 경우에는 셋트대여입니다.
+
+=cut
+
+sub _is_suit_set {
+    my ($self, @codes) = @_;
+    return unless @codes;
+
+    my $hasJacket = grep { /^0?J/i } @codes;
+    my $hasPants = grep { /^0?P/i } @codes;
+    return $hasJacket && $hasPants;
 }
 
 =head1 AUTHOR
