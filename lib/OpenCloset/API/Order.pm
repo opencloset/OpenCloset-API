@@ -109,6 +109,11 @@ B<주문서없음> -> B<방문예약>
 
     my $order = $api->reservated($user, '2017-09-19T16:00:00');
 
+L<https://github.com/opencloset/opencloset/issues/1627>
+
+예약확정이 되었을때에 더 이상의 slot 이 없다면,
+동시간대의 다른 성별의 에약 버퍼 slot 을 하나 가져옵니다.
+가능한 최대의 예약을 소화하기 위함 입니다.
 
 =head3 C<%extra> Args
 
@@ -210,6 +215,8 @@ sub reservated {
 
         my $order = $schema->resultset('Order')->create( \%args );
         die "Failed to create a new order" unless $order;
+
+        $self->take_booking_slot_if_available($datetime, $user_info->gender);
 
         $guard->commit;
         return $order;
@@ -1713,6 +1720,77 @@ sub transfer_order {
         }
     }
 
+    return 1;
+}
+
+=head2 take_booking_slot_if_available($datetime, $gender)
+
+해당 시간의 C<$gender> 의 예약 슬롯이 없을때에, 다른 성별의 예약 슬롯을
+하나 가져옵니다.
+
+=head3 return
+
+return true if take, otherwise false.
+
+=head3 arguments
+
+=over
+
+=item *
+
+C<$datetime>
+
+L<DateTime> object
+
+=item *
+
+C<$gender>
+
+C<male> or C<female>
+
+=back
+
+=cut
+
+sub take_booking_slot_if_available {
+    my ($self, $datetime, $gender) = @_;
+
+    my %map = (
+        female => 'male',
+        male   => 'female',
+    );
+
+    my $schema = $self->{schema};
+    my $booking = $schema->resultset('Booking')->find(
+        {
+            date   => "$datetime",
+            gender => $gender
+        }
+    );
+
+    return unless $booking;
+
+    my $reservated = $schema->resultset('Order')->search({ booking_id => $booking->id })->count;
+
+    my $slot = $booking->slot;
+    return if $slot > $reservated;    # 아직 slot 이 남아있음
+
+    my $other_booking = $schema->resultset('Booking')->find(
+        {
+            date   => "$datetime",
+            gender => $map{$gender}
+        }
+    );
+
+    return unless $other_booking;
+
+    my $other_slot = $other_booking->slot;
+    my $other_reservated = $schema->resultset('Order')->search({ booking_id => $other_booking->id })->count;
+    my $buffer = $other_slot - $other_reservated;
+    return if $buffer <= 1;    # 하나 남은건 못 준다.
+
+    $booking->update({ slot => $slot + 1 });
+    $other_booking->update({ slot => $other_slot - 1 });
     return 1;
 }
 
