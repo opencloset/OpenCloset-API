@@ -3,6 +3,9 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
+### Added
+- 포장완료 단계에서 쿠폰 할인 적용이 안되는 건의 추적을 위해 로그를 남김 (#30)
+
 ## [v0.1.12] - Sun, 15 Dec 2019 12:41:11 +0900
 ### Changed
 - 동적으로 예약슬롯을 변경해서 최대치 예약이 가능토록 함 (#28)

@@ -551,6 +551,13 @@ sub box2boxed {
         ## 3회 이상 대여자 할인 또는 쿠폰 할인
         ## 결제대기 상태에서 쿠폰을 삽입하면 3회 이상 대여자의 중복할인을 제거해야 한다
         if ( my $coupon = $order->coupon ) {
+            my $TAG = sprintf "[box2boxed (%d)]", $order->id;
+            printf STDERR "%s: found coupon id(%d), status(%s), type(%s)\n",
+                $TAG,
+                $coupon->id,
+                $coupon->status,
+                $coupon->type;
+
             ## 쿠폰할인(가격, 비율, 단벌)
             ##   할인명목의 품목이 추가되는 방식(할인쿠폰: -10,000원)
             my $price_pay_with = '쿠폰';
