@@ -19,6 +19,9 @@ use OpenCloset::Events::EmploymentWing ();
 
 use OpenCloset::DB::Plugin::Order::Sale;
 
+our $SEOUL_EVENT_MIN_AGE = 18;
+our $SEOUL_EVENT_MAX_AGE = 35;
+
 =encoding utf8
 
 =head1 NAME
@@ -263,6 +266,45 @@ sub reservated {
     );
     chomp $msg;
     $sms->send( to => $user_info->phone, msg => $msg );
+
+    ## https://github.com/opencloset/OpenCloset-API/issues/31
+    ## 예약직후에 서울시 쿠폰 대상자에게 문자발송
+    unless ($is_jobwing or $order->coupon) {
+        my $birth   = $user_info->birth;
+        my $tz      = $order->create_date->time_zone;
+        my $today   = DateTime->today( time_zone => $tz->name );
+        my $year    = $today->year;
+        my $age     = $year - $birth;
+        my $purpose = $order->purpose;
+        my $addr    = $user_info->address2 || $user_info->address3 || '';
+        if ($age >= $SEOUL_EVENT_MIN_AGE
+                && $age <= $SEOUL_EVENT_MAX_AGE
+                && ($purpose eq '입사면접' || $purpose eq '인턴면접')
+                && $addr =~ m/^서울/) {
+
+            ## 이벤트 기간이 아닐때에는 보내지 않는다.
+            my $event = $schema->resultset('Event')->search({
+                name => "seoul-$year-1",
+            }, {
+                order_by => {
+                    -desc => 'create_date'
+                }
+            })->next;
+            return $order unless $event;
+
+            my $eventStartDate = $event->start_date;
+            my $eventEndDate = $event->end_date;
+
+            return $order if $today->epoch < $eventStartDate->epoch;
+            return $order if $today->epoch > $eventEndDate->epoch;
+
+            $tpl = data_section __PACKAGE__, 'employment-wing-target.txt';
+            $msg = $mt->render($tpl);
+            chomp $msg;
+            $sms->send( to => $user_info->phone, msg => $msg );
+        }
+        return $order;
+    }
 
     return $order unless $is_jobwing;
 
@@ -1904,3 +1946,9 @@ https://www.facebook.com/TheOpenCloset/
 @@ booking-datetime-update.txt
 % my ($name, $datetime) = @_;
 [열린옷장] <%= $name %>님 <%= $datetime %>으로 방문 예약이 변경되었습니다.
+
+@@ employment-wing-target.txt
+[열린옷장] 서울시 무료대여 정보알림
+현재 서울시 청년을 위한 연 10회 무료 정장대여 "취업날개 서비스" 진행중입니다. 주소지, 입사면접 증빙 등 자격요건과 필요서류를 확인하시고 소중한 혜택을 누리시기 바랍니다.
+
+서울시 취업날개 바로가기 => http://bitly.kr/yw53
