@@ -275,7 +275,7 @@ sub reservated {
         my $today   = DateTime->today( time_zone => $tz->name );
         my $year    = $today->year;
         my $age     = $year - $birth;
-        my $purpose = $order->purpose;
+        my $purpose = $user_info->purpose || '';
         my $addr    = $user_info->address2 || $user_info->address3 || '';
         if ($age >= $SEOUL_EVENT_MIN_AGE
                 && $age <= $SEOUL_EVENT_MAX_AGE
