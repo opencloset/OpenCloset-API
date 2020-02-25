@@ -3,6 +3,11 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
+## [v0.1.14] - Tue, 25 Feb 2020 22:13:51 +0900
+### Fixed
+- 예약직후에 서울시 이벤트 대상자에게 이용안내 SMS 를 발송
+  대여목적을 사용자 정보에서 참조하도록 함(#31)
+
 ## [v0.1.13] - Mon, 24 Feb 2020 23:13:36 +0900
 ### Changed
 - 예약직후에 서울시 이벤트 대상자에게 이용안내 SMS 를 발송 (#31)
