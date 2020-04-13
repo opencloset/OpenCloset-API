@@ -3,6 +3,7 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
+## [v0.1.15] - 2020-04-14 02:42:56 Asia/Seoul
 ### Added
 - 입사면접이 화상면접인 주문서 생성 및 예약시 태그를 추가해 식별할 수 있게함 (#33)
 
