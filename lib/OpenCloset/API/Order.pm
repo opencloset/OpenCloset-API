@@ -220,6 +220,7 @@ sub reservated {
         die "Failed to create a new order" unless $order;
 
         $self->take_booking_slot_if_available($datetime, $user_info->gender);
+        $self->_update_interview_type( $order, $extra{interview} );
 
         $guard->commit;
         return $order;
@@ -417,6 +418,7 @@ sub update_reservated {
         ## coupon 중복사용 허용하지 않음
         $self->transfer_order( $extra{coupon}, $order ) if $extra{coupon};
         $order->update( \%args )->discard_changes();
+        $self->_update_interview_type( $order, $extra{interview} );
         $guard->commit;
         return 1;
     }
@@ -1852,6 +1854,43 @@ sub _is_suit_set {
     my $hasJacket = grep { /^0?J/i } @codes;
     my $hasPants = grep { /^0?P/i } @codes;
     return $hasJacket && $hasPants;
+}
+
+#
+# GH #1684
+#   화상면접인 경우 주문서에 태그를 추가하거나 제거함
+#
+sub _update_interview_type {
+    my ( $self, $order, $interview ) = @_;
+
+    my $schema = $self->{schema};
+
+    my $online_tag = $schema->resultset("Tag")->find_or_create({ name => "화상면접" });
+    return unless $online_tag;
+
+    my $online_order_tag = $order->order_tags->search({ tag_id => $online_tag->id })->next;
+    {
+        use experimental qw( smartmatch switch );
+        given ($interview) {
+            when ("online") {
+                # 주문서에 화상면접 태그 추가
+                unless ($online_order_tag) {
+                    $schema->resultset("OrderTag")->create(
+                        {
+                            order_id => $order->id,
+                            tag_id   => $online_tag->id,
+                        }
+                    );
+                }
+            }
+            default {
+                # 주문서에 화상면접 태그 제거
+                if ($online_order_tag) {
+                    $online_order_tag->delete;
+                }
+            }
+        }
+    }
 }
 
 =head1 AUTHOR
