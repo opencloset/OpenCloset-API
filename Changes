@@ -3,6 +3,9 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
+### Added
+- 입사면접이 화상면접인 주문서 생성 및 예약시 태그를 추가해 식별할 수 있게함 (#33)
+
 ## [v0.1.14] - Tue, 25 Feb 2020 22:13:51 +0900
 ### Fixed
 - 예약직후에 서울시 이벤트 대상자에게 이용안내 SMS 를 발송
