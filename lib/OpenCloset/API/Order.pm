@@ -283,6 +283,10 @@ sub reservated {
                 && ($purpose eq '입사면접' || $purpose eq '인턴면접')
                 && $addr =~ m/^서울/) {
 
+            ## https://github.com/opencloset/opencloset/issues/1696
+            ## 비용 절감을 위해 대상에게 안내 문자메세지를 보내지 않는다.
+            return $order;
+
             ## 이벤트 기간이 아닐때에는 보내지 않는다.
             my $event = $schema->resultset('Event')->search({
                 name => "seoul-$year-1",
