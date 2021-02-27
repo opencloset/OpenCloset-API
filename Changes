@@ -3,6 +3,9 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
+### Added
+- 결혼식의 상세목적이 본식 또는 웨딩촬영일때에 주문서에 태그를 추가해 식별할 수 있게함 (#36)
+
 ## [v0.1.16] - Sun, 31 May 2020 11:42:32 +0900
 ### Changed
 - 예약직후에 서울시 이벤트 대상자에게 발송하던 이용안내 SMS 를 보내지 않음(#1696)
