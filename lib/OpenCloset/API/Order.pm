@@ -221,6 +221,7 @@ sub reservated {
 
         $self->take_booking_slot_if_available($datetime, $user_info->gender);
         $self->_update_interview_type( $order, $extra{interview} );
+        $self->_update_wedding_type( $order, $extra{wedding} );
 
         $guard->commit;
         return $order;
@@ -423,6 +424,7 @@ sub update_reservated {
         $self->transfer_order( $extra{coupon}, $order ) if $extra{coupon};
         $order->update( \%args )->discard_changes();
         $self->_update_interview_type( $order, $extra{interview} );
+        $self->_update_wedding_type( $order, $extra{wedding} );
         $guard->commit;
         return 1;
     }
@@ -1891,6 +1893,84 @@ sub _update_interview_type {
                 # 주문서에 화상면접 태그 제거
                 if ($online_order_tag) {
                     $online_order_tag->delete;
+                }
+            }
+        }
+    }
+}
+
+=head2 _update_wedding_type( $order, $wedding )
+
+L<https://github.com/opencloset/opencloset/issues/1768>
+L<https://github.com/opencloset/OpenCloset-API/issues/36>
+
+대여목적이 웨딩인 경우 태그를 추가해 식별할 수 있도록 함.
+
+주문서에 C<웨딩촬영> 또는 C<본식> 태그를 추가함.
+
+=over
+
+=item C<$order>
+
+=item C<$wedding>
+
+=over
+
+=item * 하객
+
+=item * 혼주
+
+=item * 웨딩촬영
+
+=item * 본식
+
+=back
+
+=back
+
+=cut
+
+sub _update_wedding_type {
+    my ( $self, $order, $wedding ) = @_;
+
+    my $schema = $self->{schema};
+
+    my $tag_a = $schema->resultset("Tag")->find_or_create({ name => "웨딩촬영", label => "" });
+    return unless $tag_a;
+
+    my $tag_b = $schema->resultset("Tag")->find_or_create({ name => "본식", label => "" });
+    return unless $tag_b;
+
+    # 웨딩촬영
+    my $a_order_tag = $order->order_tags->search({ tag_id => $tag_a->id })->next;
+
+    # 본식
+    my $b_order_tag = $order->order_tags->search({ tag_id => $tag_b->id })->next;
+
+    {
+        use experimental qw( smartmatch switch );
+        given ($wedding) {
+            when ("웨딩촬영") {
+                $schema->resultset("OrderTag")->find_or_create({
+                    order_id => $order->id,
+                    tag_id   => $tag_a->id,
+                });
+            }
+            when ("본식") {
+                $schema->resultset("OrderTag")->find_or_create({
+                    order_id => $order->id,
+                    tag_id   => $tag_b->id,
+                });
+            }
+            default {
+                # 주문서에서 웨딩촬영 태그 제거
+                if ($a_order_tag) {
+                    $a_order_tag->delete;
+                }
+
+                # 주문서에서 본식 태그 제거
+                if ($b_order_tag) {
+                    $b_order_tag->delete;
                 }
             }
         }
