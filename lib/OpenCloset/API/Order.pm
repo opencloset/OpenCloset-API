@@ -1935,17 +1935,17 @@ sub _update_wedding_type {
 
     my $schema = $self->{schema};
 
-    my $tag_a = $schema->resultset("Tag")->find_or_create({ name => "웨딩촬영" });
+    my $tag_a = $schema->resultset("Tag")->find_or_create({ name => "웨딩촬영", label => "" });
     return unless $tag_a;
 
-    my $tag_b = $schema->resultset("Tag")->find_or_create({ name => "본식" });
+    my $tag_b = $schema->resultset("Tag")->find_or_create({ name => "본식", label => "" });
     return unless $tag_b;
 
     # 웨딩촬영
-    my $a_order_tag = $order->order_tags->search({ tag_id => tag_a->id })->next;
+    my $a_order_tag = $order->order_tags->search({ tag_id => $tag_a->id })->next;
 
     # 본식
-    my $b_order_tag = $order->order_tags->search({ tag_id => tag_b->id })->next;
+    my $b_order_tag = $order->order_tags->search({ tag_id => $tag_b->id })->next;
 
     {
         use experimental qw( smartmatch switch );
