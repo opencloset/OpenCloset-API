@@ -1995,28 +1995,31 @@ __DATA__
 
 @@ order-confirm-1.txt
 % my ($order, $user) = @_;
-[열린옷장] <%= $user->name %>님 안녕하세요. 택배반납을 하시거나 연장신청이 필요한 경우, 본 문자를 보관하고 계시다가 반드시 아래 주소를 클릭하여 정보를 입력해주세요. 정보 미입력시 미반납, 연체 상황이 발생할 수 있으므로 반드시 본 정보 작성을 요청드립니다. 감사합니다.
+% my $period = 3 + $order->additional_day;
+<%= $user->name %>님의 정장 대여기간은 <%= $period %>박<%= $period + 1 %>일 입니다. 기간내에 방문 또는 택배 반납을 부탁드립니다.
 
-1. 택배로 발송을 하신 경우: https://staff.theopencloset.net/order/<%= $order->id %>/return/ 를 클릭하여 반납택배 발송알리미를 작성해주세요.
+1. 택배로 반납하는 경우, 발송 후에 아래 링크에 접속해 운송장번호를 입력해주세요.
+https://staff.theopencloset.net/order/<%= $order->id %>/return/
 
-서울시 광진구 아차산로 213(화양동 48-3번지) 웅진빌딩 403호 열린옷장
+주소 : 서울시 광진구 아차산로 213(화양동 48-3) 웅진빌딩 403호
 
-2. 대여기간을 연장 하려는 경우: https://staff.theopencloset.net/order/<%= $order->id %>/extension/ 를 클릭하여 대여기간 연장신청서를 작성해주세요.
+2. 대여기간을 연장하는 경우, 아래 링크에 접속해 기간을 연장해주세요.
+https://staff.theopencloset.net/order/<%= $order->id %>/extension/
 
 @@ order-confirm-2.txt
 % my ($order, $user, $donation, $category) = @_;
 % my $donator = $donation->user;
-[열린옷장] 안녕하세요. <%= $user->name %>님.
-<%= $category %> 기증자 <%= $donator->name %>님의 기증 편지를 읽어보세요.
+<%= $user->name %>님, 편지선물을 드립니다. <%= $category %> 기증자 <%= $donator->name %>님이 남긴 편지입니다.
 
-----
+--
 
 <%= $donation->message %>
 
-----
+기증자 <%= $donator->name %>
 
-<%= $user->name %>님이 대여하신 다른 의류의 기증자 이야기를 읽으시려면 URL을 클릭해 주세요.
+--
 
+다른 품목의 기증편지를 읽고싶다면 아래 링크를 클릭해 주세요.
 https://story.theopencloset.net/letters/o/<%= $order->id %>/d
 
 @@ returned-1.txt
