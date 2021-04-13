@@ -3,6 +3,7 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
+## [v0.1.18] - Tue, 13 Apr 2021 09:38:29 +0900
 ### Changed
 - 대여확정 문자 내용 변경 (https://github.com/opencloset/OpenCloset-Cron-SMS/issues/45)
 - 예약완료 문자 내용 변경 (https://github.com/opencloset/OpenCloset-Cron-SMS/issues/44)
