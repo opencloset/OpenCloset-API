@@ -3,6 +3,13 @@
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## [Unreleased]
+## [v0.1.18] - Tue, 13 Apr 2021 09:38:29 +0900
+### Changed
+- 대여확정 문자 내용 변경 (https://github.com/opencloset/OpenCloset-Cron-SMS/issues/45)
+- 예약완료 문자 내용 변경 (https://github.com/opencloset/OpenCloset-Cron-SMS/issues/44)
+- 반납문자 내용 변경 (https://github.com/opencloset/OpenCloset-Cron-SMS/issues/36)
+- 취업날개 문자 내용 변경 (https://github.com/opencloset/OpenCloset-Cron-SMS/issues/31)
+
 ## [v0.1.17] - Sun, 28 Feb 2021 08:36:47 +0900
 ### Added
 - 결혼식의 상세목적이 본식 또는 웨딩촬영일때에 주문서에 태그를 추가해 식별할 수 있게함 (#36)
