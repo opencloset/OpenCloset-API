@@ -2026,11 +2026,11 @@ https://story.theopencloset.net/letters/o/<%= $order->id %>/d
 % my ($order, $user) = @_;
 <%= $user->name %> 님의 의류가 정상적으로 반납되었습니다. 감사합니다.
 
-📦 열린옷장 택배대여
+열린옷장 택배대여
 다시 대여할 때는 택배대여를 이용하면 더 편리합니다.
 https://share.theopencloset.net/welcome
 
-📌 열린옷장 인스타그램
+열린옷장 인스타그램
 열린옷장에서 진행하는 무료 프로그램과 취준 정보를 볼 수 있습니다.
 https://www.instagram.com/opencloset_suit/
 
